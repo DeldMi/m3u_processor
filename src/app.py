@@ -1,16 +1,22 @@
 import os
 import threading
 import asyncio
-from flask import Flask, render_template_string, jsonify, request, send_from_directory, abort
-from apscheduler.schedulers.background import BackgroundScheduler
+from collections import deque
+from datetime import datetime
+from flask import Flask, render_template, jsonify, request, redirect, url_for, send_from_directory
+from werkzeug.security import check_password_hash, generate_password_hash
 from src.manager import PlaylistManager
 from src.config import ConfigManager
+from src.auth import login_user, logout_user, current_user, require_role
+from apscheduler.schedulers.background import BackgroundScheduler
 
-app = Flask(__name__)
-ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-manager = PlaylistManager(ROOT_DIR)
-config_mgr = ConfigManager(ROOT_DIR)
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+app = Flask(__name__, 
+            template_folder=os.path.join(BASE_DIR, "frontend", "templates"),
+            static_folder=os.path.join(BASE_DIR, "frontend", "static"))
 
+app.secret_key = ConfigManager(BASE_DIR).get_all().get("SECRET_KEY", "m3u_processor_secret_key_fixed")
+manager = PlaylistManager(BASE_DIR)
 scheduler = BackgroundScheduler(daemon=True)
 scheduler.start()
 
@@ -22,6 +28,19 @@ PROCESS_STATE = {
     "manifestos": [],
     "ultimo_log": "Sistema pronto para execucao."
 }
+PROCESS_LOGS = deque(maxlen=250)
+
+def add_process_log(message: str, level: str = "info"):
+    PROCESS_LOGS.appendleft({
+        "timestamp": datetime.now().strftime("%H:%M:%S"),
+        "level": level,
+        "message": message
+    })
+
+def update_log_state(message: str):
+    global PROCESS_STATE
+    PROCESS_STATE["ultimo_log"] = message
+    add_process_log(message)
 
 def execute_pipeline():
     global PROCESS_STATE
@@ -29,231 +48,175 @@ def execute_pipeline():
         return
 
     PROCESS_STATE["status"] = "Executando..."
-    PROCESS_STATE["ultimo_log"] = "Deduplicando e coletando canais (locais, historicos e remotos)..."
+    update_log_state("Iniciando auditoria completa...")
 
-    channels = asyncio.run(manager.load_all_channels())
-    total = len(channels)
-    PROCESS_STATE["total_canais"] = total
-
-    if total == 0:
-        PROCESS_STATE["status"] = "Finalizado (Vazio)"
-        PROCESS_STATE["ultimo_log"] = "Nenhum canal localizado para validar."
-        return
-
-    PROCESS_STATE["ultimo_log"] = f"Validando integridade de {total} canais unicos com bypass SSL..."
-    valid, invalid = asyncio.run(manager.validate_channels(channels))
-
-    PROCESS_STATE["canais_online"] = len(valid)
-    PROCESS_STATE["canais_offline"] = len(invalid)
-
-    PROCESS_STATE["ultimo_log"] = "Particionando lotes de no maximo 400 canais e sincronizando EPGs..."
-    manifests = asyncio.run(manager.process_and_partition(valid))
-    PROCESS_STATE["manifestos"] = manifests
-
-    log_path = manager.generate_audit_log(total, valid, invalid, manifests)
-    PROCESS_STATE["status"] = "Concluido"
-    PROCESS_STATE["ultimo_log"] = f"Finalizado! {len(valid)} ativos salvos em {len(manifests)} bloco(s). Removidos: {len(invalid)}. Log: {os.path.basename(log_path)}"
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        res = loop.run_until_complete(manager.sync_and_audit(progress_callback=update_log_state))
+        PROCESS_STATE["total_canais"] = res.get("total", 0)
+        PROCESS_STATE["canais_online"] = res.get("online", 0)
+        PROCESS_STATE["canais_offline"] = res.get("offline", 0)
+        PROCESS_STATE["manifestos"] = res.get("partitions", [])
+        PROCESS_STATE["status"] = "Concluido"
+        PROCESS_STATE["ultimo_log"] = f"Sucesso! {res.get('online', 0)} canais operantes salvos em {len(res.get('partitions', []))} lista(s). Log: {res.get('log_file')}"
+        add_process_log(PROCESS_STATE["ultimo_log"], "success")
+    except Exception as e:
+        PROCESS_STATE["status"] = "Erro"
+        PROCESS_STATE["ultimo_log"] = f"Falha na execucao: {str(e)}"
+        add_process_log(PROCESS_STATE["ultimo_log"], "error")
+    finally:
+        loop.close()
 
 def setup_scheduler():
     scheduler.remove_all_jobs()
-    cfg = config_mgr.get_all()
-    mode = cfg["SCHEDULE_MODE"]
+    cfg = manager.config_mgr.get_all()
+    mode = cfg.get("SCHEDULE_MODE", "DISABLED")
 
     if mode == "INTERVAL":
-        hours = max(1, cfg["SCHEDULE_INTERVAL_HOURS"])
-        scheduler.add_job(execute_pipeline, 'interval', hours=hours, id="m3u_job")
+        hours = max(1, cfg.get("SCHEDULE_INTERVAL_HOURS", 12))
+        scheduler.add_job(execute_pipeline, 'interval', hours=hours, id="m3u_sync_job")
     elif mode == "CRON":
         try:
-            h, m = cfg["SCHEDULE_CRON_TIME"].split(":")
-            scheduler.add_job(execute_pipeline, 'cron', hour=int(h), minute=int(m), id="m3u_job")
+            h, m = cfg.get("SCHEDULE_CRON_TIME", "03:00").split(":")
+            scheduler.add_job(execute_pipeline, 'cron', hour=int(h), minute=int(m), id="m3u_sync_job")
         except Exception:
             pass
 
 setup_scheduler()
 
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <title>Painel de Controle M3U e Guia EPG</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0b0f19; color: #f1f5f9; margin: 0; padding: 24px; }
-        .container { max-width: 1100px; margin: 0 auto; }
-        .card { background: #1e293b; border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 1px solid #334155; }
-        h1, h2, h3 { color: #38bdf8; margin-top: 0; }
-        .grid-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
-        .metric { background: #0f172a; padding: 16px; border-radius: 6px; text-align: center; border: 1px solid #1e293b; }
-        .metric-title { font-size: 11px; color: #94a3b8; text-transform: uppercase; }
-        .metric-value { font-size: 24px; font-weight: bold; margin-top: 6px; }
-        .btn { background: #0284c7; color: #fff; border: none; padding: 10px 20px; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; }
-        .btn:hover { background: #0369a1; }
-        .btn:disabled { background: #475569; cursor: not-allowed; }
-        pre { background: #000; padding: 12px; border-radius: 6px; color: #4ade80; font-size: 12px; max-height: 140px; overflow-y: auto; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 5px; }
-        input, select, textarea { width: 100%; padding: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box; }
-        textarea { height: 65px; resize: vertical; }
-        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { text-align: left; padding: 10px; border-bottom: 1px solid #334155; font-size: 13px; }
-        th { color: #94a3b8; }
-        .link-copy { background: #0f172a; padding: 4px 8px; border-radius: 4px; border: 1px solid #334155; font-family: monospace; color: #38bdf8; word-break: break-all; }
-    </style>
-</head>
-<body>
-<div class="container">
-    <div class="card">
-        <h1>Painel Gerenciador de Listas e Guias EPG</h1>
-        <div class="grid-metrics">
-            <div class="metric"><div class="metric-title">Status</div><div class="metric-value" id="status">Ocioso</div></div>
-            <div class="metric"><div class="metric-title">Total Processado</div><div class="metric-value" id="total">0</div></div>
-            <div class="metric"><div class="metric-title">Operantes</div><div class="metric-value" style="color: #4ade80;" id="online">0</div></div>
-            <div class="metric"><div class="metric-title">Removidos / Offline</div><div class="metric-value" style="color: #f87171;" id="offline">0</div></div>
-        </div>
-        <button class="btn" id="btn-run" onclick="iniciarProcessamento()">Processar e Reorganizar Agora</button>
-    </div>
+@app.context_processor
+def inject_user():
+    return dict(user=current_user())
 
-    <div class="card">
-        <h2>Links dos Arquivos Gerados (Diretos para Player / IPTV)</h2>
-        <table id="links-table">
-            <thead>
-                <tr>
-                    <th>Partição</th>
-                    <th>Canais</th>
-                    <th>Link M3U / M3U8</th>
-                    <th>Link Guia EPG (XMLTV)</th>
-                </tr>
-            </thead>
-            <tbody id="links-body">
-                <tr><td colspan="4" style="text-align: center; color: #94a3b8;">Nenhum lote gerado até o momento.</td></tr>
-            </tbody>
-        </table>
-    </div>
+# --- AUTENTICACAO ---
+@app.route("/login", methods=["GET", "POST"])
+def auth_login():
+    if request.method == "POST":
+        username = request.form.get("username")
+        password = request.form.get("password")
+        with manager.db.get_connection() as conn:
+            user = conn.execute("SELECT * FROM users WHERE username = ?;", (username,)).fetchone()
+            if user and check_password_hash(user["password_hash"], password):
+                login_user(dict(user))
+                return redirect(url_for("view_dashboard"))
+        return render_template("login.html", error="Credenciais invalidas.")
+    return render_template("login.html")
 
-    <div class="card">
-        <h2>Configurações do Ambiente e Automação (.env)</h2>
-        <div class="form-row">
-            <div class="form-group">
-                <label>Modo de Repetição / Agendador:</label>
-                <select id="cfg-schedule-mode">
-                    <option value="DISABLED">Desativado (Manual)</option>
-                    <option value="INTERVAL">Por Intervalo (Horas)</option>
-                    <option value="CRON">Horário Fixo Diário</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Parâmetro de Tempo:</label>
-                <input type="text" id="cfg-schedule-val" placeholder="Ex: 12 (horas) ou 03:00 (horário diário)">
-            </div>
-        </div>
+@app.route("/logout")
+def auth_logout():
+    logout_user()
+    return redirect(url_for("auth_login"))
 
-        <div class="form-row">
-            <div class="form-group">
-                <label>URL Base Pública do Servidor (BASE_URL):</label>
-                <input type="text" id="cfg-base-url" placeholder="http://127.0.0.1:5000">
-            </div>
-            <div class="form-group">
-                <label>Máximo de Canais por Arquivo:</label>
-                <input type="number" id="cfg-max-channels" value="400">
-            </div>
-        </div>
+# --- INTERFACES HTML ---
+@app.route("/")
+def view_dashboard():
+    # Se o usuario nao estiver logado, redireciona para login
+    if not current_user():
+        return redirect(url_for("auth_login"))
+    return render_template("dashboard.html")
 
-        <div class="form-group">
-            <label>Links de Listas M3U Remotas (Separadas por ';'):</label>
-            <textarea id="cfg-m3u-urls" placeholder="http://servidor.com/lista.m3u; https://outro.com/lista.m3u8"></textarea>
-        </div>
+@app.route("/playlists")
+@require_role("viewer")
+def view_playlists():
+    return render_template("playlists.html")
 
-        <div class="form-group">
-            <label>Links de Guias EPG XMLTV (iptv-epg.org ou outros, separados por ';'):</label>
-            <textarea id="cfg-epg-urls" placeholder="https://iptv-epg.org/files/brazil.xml.gz; https://iptv-epg.org/files/portugal.xml.gz"></textarea>
-        </div>
+@app.route("/channels")
+@require_role("viewer")
+def view_channels():
+    return render_template("channels.html")
 
-        <button class="btn" style="background: #10b981;" onclick="salvarConfiguracoes()">Salvar Configurações no .env</button>
-    </div>
+@app.route("/users")
+@require_role("admin")
+def view_users():
+    with manager.db.get_connection() as conn:
+        users = [dict(u) for u in conn.execute("SELECT id, username, role, created_at FROM users;").fetchall()]
+    return render_template("users.html", users=users)
 
-    <div class="card">
-        <h3>Log de Operações em Tempo Real</h3>
-        <pre id="log-output">Pronto.</pre>
-    </div>
-</div>
+@app.route("/settings")
+@require_role("admin")
+def view_settings():
+    return render_template("settings.html", config=manager.config_mgr.get_all())
 
-<script>
-function carregarConfig() {
-    fetch('/api/config')
-        .then(res => res.json())
-        .then(data => {
-            document.getElementById('cfg-schedule-mode').value = data.SCHEDULE_MODE;
-            document.getElementById('cfg-schedule-val').value = (data.SCHEDULE_MODE === 'INTERVAL') ? data.SCHEDULE_INTERVAL_HOURS : data.SCHEDULE_CRON_TIME;
-            document.getElementById('cfg-base-url').value = data.BASE_URL;
-            document.getElementById('cfg-max-channels').value = data.MAX_CHANNELS_PER_FILE;
-            document.getElementById('cfg-m3u-urls').value = data.REMOTE_M3U_URLS;
-            document.getElementById('cfg-epg-urls').value = data.EPG_URLS;
-        });
-}
+# --- ENDPOINTS REST & TELEMETRIA ---
+@app.route("/api/status")
+def get_status():
+    data = dict(PROCESS_STATE)
+    data["logs"] = list(PROCESS_LOGS)
+    data["log_count"] = len(PROCESS_LOGS)
+    return jsonify(data)
 
-function salvarConfiguracoes() {
-    const mode = document.getElementById('cfg-schedule-mode').value;
-    const val = document.getElementById('cfg-schedule-val').value;
+@app.route("/api/v1/logs")
+@require_role("viewer")
+def api_get_logs():
+    return jsonify(list(PROCESS_LOGS))
 
-    const payload = {
-        SCHEDULE_MODE: mode,
-        BASE_URL: document.getElementById('cfg-base-url').value,
-        MAX_CHANNELS_PER_FILE: document.getElementById('cfg-max-channels').value,
-        REMOTE_M3U_URLS: document.getElementById('cfg-m3u-urls').value,
-        EPG_URLS: document.getElementById('cfg-epg-urls').value
-    };
+@app.route("/api/v1/playlists")
+@require_role("viewer")
+def api_get_playlists():
+    return jsonify({"status": PROCESS_STATE["status"], "manifestos": PROCESS_STATE["manifestos"]})
 
-    if (mode === 'INTERVAL') payload.SCHEDULE_INTERVAL_HOURS = val;
-    if (mode === 'CRON') payload.SCHEDULE_CRON_TIME = val;
+@app.route("/api/v1/channels", methods=["GET"])
+@require_role("viewer")
+def api_get_channels():
+    country = request.args.get("country")
+    category = request.args.get("category")
+    status = request.args.get("status")
+    return jsonify(manager.db.list_channels(country, category, status, request.args.get("search", ""), request.args.get("sort", "id"), request.args.get("direction", "asc")))
 
-    fetch('/api/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    }).then(res => res.json()).then(() => {
-        alert("Configurações salvas e agendador sincronizado!");
-        carregarConfig();
-    });
-}
+@app.route("/api/v1/channels/<int:ch_id>", methods=["PATCH"])
+@require_role("editor")
+def api_update_channel(ch_id):
+    if not manager.db.update_channel(ch_id, request.json or {}):
+        return jsonify({"error": "Canal nao encontrado ou sem campos validos"}), 404
+    return jsonify(next(item for item in manager.db.list_channels() if item["id"] == ch_id))
 
-function atualizarDados() {
-    fetch('/api/status')
-        .then(res => res.json())
-        .then(data => {
-            document.getElementById('status').innerText = data.status;
-            document.getElementById('total').innerText = data.total_canais;
-            document.getElementById('online').innerText = data.canais_online;
-            document.getElementById('offline').innerText = data.canais_offline;
-            document.getElementById('log-output').innerText = data.ultimo_log;
-            document.getElementById('btn-run').disabled = (data.status === "Executando...");
+@app.route("/api/v1/playlists/generate", methods=["POST"])
+@require_role("editor")
+def api_generate_custom_playlist():
+    manifests = manager.generate_custom_playlist(request.json or {})
+    add_process_log(f"Lista personalizada gerada com {len(manifests)} arquivo(s).", "success")
+    return jsonify({"status": "gerado", "manifestos": manifests})
 
-            const tbody = document.getElementById('links-body');
-            if (data.manifestos.length > 0) {
-                tbody.innerHTML = data.manifestos.map(m => `
-                    <tr>
-                        <td><b>${m.m3u_name}</b></td>
-                        <td>${m.total_canais}</td>
-                        <td><a class="link-copy" href="${m.m3u_url}" target="_blank">${m.m3u_url}</a></td>
-                        <td><a class="link-copy" href="${m.xml_url}" target="_blank">${m.xml_url}</a></td>
-                    </tr>
-                `).join('');
-            }
-        });
-}
+@app.route("/api/v1/channels/<int:ch_id>/status", methods=["PATCH"])
+@require_role("editor")
+def api_toggle_channel_status(ch_id):
+    data = request.json or {}
+    new_status = data.get("status", "offline")
+    with manager.db.get_connection() as conn:
+        conn.execute("UPDATE channels SET status = ? WHERE id = ?;", (new_status, ch_id))
+        conn.commit()
+    return jsonify({"status": "atualizado"})
 
-function iniciarProcessamento() {
-    fetch('/api/start', { method: 'POST' });
-}
+@app.route("/api/v1/channels/<int:ch_id>/autoremove", methods=["PATCH"])
+@require_role("editor")
+def api_toggle_autoremove(ch_id):
+    data = request.json or {}
+    flag = data.get("auto_remove_if_offline", 1)
+    with manager.db.get_connection() as conn:
+        conn.execute("UPDATE channels SET auto_remove_if_offline = ? WHERE id = ?;", (flag, ch_id))
+        conn.commit()
+    return jsonify({"status": "atualizado"})
 
-carregarConfig();
-setInterval(atualizarDados, 2000);
-</script>
-</body>
-</html>
-"""
+@app.route("/api/v1/sync", methods=["POST"])
+@require_role("editor")
+def api_trigger_sync():
+    if PROCESS_STATE["status"] != "Executando...":
+        thread = threading.Thread(target=execute_pipeline, daemon=True)
+        thread.start()
+        return jsonify({"status": "iniciado"})
+    return jsonify({"status": "ja_em_execucao"})
 
-# Rotas diretas para download/streaming de listas e EPGs
+@app.route("/api/config", methods=["POST"])
+@require_role("admin")
+def api_save_config():
+    data = request.json or {}
+    for k, v in data.items():
+        manager.config_mgr.update_key(k, v)
+    setup_scheduler()
+    return jsonify({"status": "atualizado"})
+
+# Servidores estaticos de arquivos M3U e XMLTV
 @app.route("/playlist/<filename>")
 def serve_playlist(filename):
     return send_from_directory(manager.output_dir, filename, mimetype="application/x-mpegurl")
@@ -262,32 +225,6 @@ def serve_playlist(filename):
 def serve_epg(filename):
     return send_from_directory(manager.output_dir, filename, mimetype="application/xml")
 
-@app.route("/")
-def index():
-    return render_template_string(HTML_TEMPLATE)
-
-@app.route("/api/status")
-def get_status():
-    return jsonify(PROCESS_STATE)
-
-@app.route("/api/start", methods=["POST"])
-def start_execution():
-    if PROCESS_STATE["status"] != "Executando...":
-        thread = threading.Thread(target=execute_pipeline, daemon=True)
-        thread.start()
-        return jsonify({"status": "iniciado"})
-    return jsonify({"status": "em_andamento"})
-
-@app.route("/api/config", methods=["GET", "POST"])
-def manage_config():
-    if request.method == "POST":
-        data = request.json or {}
-        for k, v in data.items():
-            config_mgr.update_key(k, v)
-        setup_scheduler()
-        return jsonify({"status": "atualizado"})
-    return jsonify(config_mgr.get_all())
-
 if __name__ == "__main__":
-    cfg = config_mgr.get_all()
+    cfg = manager.config_mgr.get_all()
     app.run(host=cfg["WEB_HOST"], port=cfg["WEB_PORT"], debug=False)

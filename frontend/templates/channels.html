@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <h2>Catálogo e Editor de Canais</h2>
+    <div class="filter-bar channel-toolbar">
+        <input id="channel-search" type="search" placeholder="Pesquisar nome, URL, grupo, EPG ou local..."
+            oninput="scheduleChannelLoad()">
+        <select id="filter-country" onchange="loadChannels()">
+            <option value="todos">Todos os Países</option>
+            <option value="Brasil">Brasil</option>
+            <option value="Portugal">Portugal</option>
+            <option value="Estados Unidos">Estados Unidos</option>
+        </select>
+        <select id="filter-category" onchange="loadChannels()">
+            <option value="todos">Todas as Categorias</option>
+            <option value="tv">Canais Lineares (TV)</option>
+            <option value="vod">Filmes (VOD)</option>
+            <option value="series">Séries</option>
+            <option value="radio">Rádio / Áudio</option>
+        </select>
+        <select id="filter-status" onchange="loadChannels()">
+            <option value="todos">Todos os Status</option>
+            <option value="online">Apenas Online</option>
+            <option value="offline">Apenas Offline</option>
+        </select>
+        <select id="sort-channels" onchange="loadChannels()">
+            <option value="id">Ordenar por inclusão</option>
+            <option value="name">Ordenar por nome</option>
+            <option value="country">Ordenar por país</option>
+            <option value="category">Ordenar por categoria</option>
+            <option value="status">Ordenar por status</option>
+            <option value="latency_ms">Ordenar por latência</option>
+        </select>
+        <select id="sort-direction" onchange="loadChannels()">
+            <option value="asc">Crescente</option>
+            <option value="desc">Decrescente</option>
+        </select>
+        <input id="channel-page-size" type="number" min="1" step="1" onchange="loadChannels()"
+            onkeydown="if (event.key === 'Enter') loadChannels()" placeholder="Quantidade (vazio = todos)"
+            aria-label="Quantidade de canais por grupo">
+    </div>
+
+    <div class="editor-actions">
+        <label><input type="checkbox" id="select-all-channels" onchange="toggleAllChannels(this.checked)"> Selecionar
+            todos os canais mostrados</label>
+        <span id="channel-count" class="muted-text">0 canais mostrados</span>
+        <div class="channel-pagination" aria-label="Paginação dos canais">
+            <button class="btn page-btn" id="previous-channel-page" onclick="changeChannelPage(-1)" disabled
+                title="Grupo anterior">&lt;</button>
+            <span id="channel-page-indicator">Página 1 de 1</span>
+            <button class="btn page-btn" id="next-channel-page" onclick="changeChannelPage(1)" disabled
+                title="Próximo grupo">&gt;</button>
+        </div>
+        <button class="btn" onclick="openPlaylistBuilder()">Criar lista com seleção</button>
+        <details class="column-picker">
+            <summary>Colunas visíveis</summary>
+            <label><input type="checkbox" data-column="location" checked
+                    onchange="toggleColumn('location', this.checked)"> Localização</label>
+            <label><input type="checkbox" data-column="group" checked onchange="toggleColumn('group', this.checked)">
+                Grupo</label>
+            <label><input type="checkbox" data-column="epg" checked onchange="toggleColumn('epg', this.checked)"> EPG
+                ID</label>
+            <label><input type="checkbox" data-column="latency" checked
+                    onchange="toggleColumn('latency', this.checked)"> Latência</label>
+            <label><input type="checkbox" data-column="url" onchange="toggleColumn('url', this.checked)"> URL</label>
+        </details>
+    </div>
+
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Selecionar</th>
+                <th>Status</th>
+                <th>Nome</th>
+                <th>País / Estado / Cidade</th>
+                <th>Tipo</th>
+                <th data-column="group">Grupo</th>
+                <th data-column="epg">EPG ID</th>
+                <th data-column="latency">Latência</th>
+                <th data-column="url" class="is-hidden">URL</th>
+                <th>Remover se OFF</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody id="channels-table-body">
+            <!-- Renderizacao dinamica via static/js/app.js -->
+        </tbody>
+    </table>
+</div>
+
+<div id="playlist-builder" class="modal">
+    <div class="modal-content playlist-builder-content">
+        <span class="modal-close" onclick="closePlaylistBuilder()">&times;</span>
+        <h3>Criar lista M3U personalizada</h3>
+        <p id="selection-summary" class="muted-text">Nenhum canal selecionado.</p>
+        <div class="filter-bar">
+            <input id="playlist-name" placeholder="Nome da lista (opcional)">
+            <select id="playlist-sort">
+                <option value="name">Ordenar por nome</option>
+                <option value="country">Ordenar por país</option>
+                <option value="group_title">Ordenar por grupo</option>
+                <option value="category">Ordenar por categoria</option>
+                <option value="latency_ms">Ordenar por latência</option>
+            </select>
+            <select id="playlist-direction">
+                <option value="asc">A-Z / menor primeiro</option>
+                <option value="desc">Z-A / maior primeiro</option>
+            </select>
+            <input id="playlist-limit" type="number" min="1" placeholder="Canais por arquivo (padrão)">
+        </div>
+        <label><input type="checkbox" id="playlist-online-only" checked> Somente canais online</label>
+        <button class="btn" onclick="generatePlaylist()">Gerar playlist</button>
+        <div id="playlist-result" class="muted-text"></div>
+    </div>
+</div>
+
+<div id="channel-editor" class="modal">
+    <div class="modal-content channel-editor-content">
+        <span class="modal-close" onclick="closeChannelEditor()">&times;</span>
+        <h3>Editar canal completo</h3>
+        <form id="channel-editor-form" onsubmit="saveChannel(event)">
+            <input type="hidden" id="edit-channel-id">
+            <div class="channel-edit-grid">
+                <label>Nome<input id="edit-name" required></label>
+                <label>URL do stream<input id="edit-url" type="url" required></label>
+                <label>URL do ícone<input id="edit-logo" type="url"></label>
+                <label>ID EPG (tvg-id)<input id="edit-tvg-id"></label>
+                <label>Grupo<input id="edit-group"></label>
+                <label>País<input id="edit-country"></label>
+                <label>Estado<input id="edit-state"></label>
+                <label>Cidade<input id="edit-city"></label>
+                <label>Categoria<select id="edit-category">
+                        <option value="tv">TV</option>
+                        <option value="vod">VOD</option>
+                        <option value="series">Séries</option>
+                        <option value="radio">Rádio</option>
+                        <option value="outros">Outros</option>
+                    </select></label>
+                <label>Status<select id="edit-status">
+                        <option value="online">Online</option>
+                        <option value="offline">Offline</option>
+                        <option value="desconhecido">Desconhecido</option>
+                    </select></label>
+            </div>
+            <label>Metadados M3U completos<textarea id="edit-metadata" rows="4"></textarea></label>
+            <label class="edit-checkbox"><input id="edit-auto-remove" type="checkbox"> Remover automaticamente se ficar
+                offline</label>
+            <div class="editor-actions">
+                <button type="button" class="btn" onclick="closeChannelEditor()">Cancelar</button>
+                <button type="submit" class="btn save-btn">Salvar canal</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal para Visualizacao (Player HLS Embutido) -->
+<div id="player-modal" class="modal">
+    <div class="modal-content">
+        <span class="modal-close" onclick="closePlayer()">&times;</span>
+        <h3 id="player-title">Reproduzindo Canal</h3>
+        <video id="video-player" controls autoplay></video>
+    </div>
+</div>
+{% endblock %}

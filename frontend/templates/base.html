@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciador e Auditor M3U/IPTV</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</head>
+
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="nav-brand"><span class="brand-mark">M3</span><span class="brand-full">M3U ARCHITECT</span></div>
+        <button class="menu-toggle" onclick="toggleSidebar()" title="Abrir ou recolher menu"
+            aria-label="Abrir ou recolher menu">☰</button>
+        <div class="nav-links">
+            <a href="/" title="Painel Geral"><span class="nav-icon">⌂</span><span class="nav-label">Painel
+                    Geral</span></a>
+            <a href="/channels" title="Canais e Editor"><span class="nav-icon">▦</span><span class="nav-label">Canais e
+                    Editor</span></a>
+            <a href="/playlists" title="Listas Particionadas"><span class="nav-icon">▤</span><span
+                    class="nav-label">Listas Particionadas</span></a>
+            <a href="/users" title="Usuários"><span class="nav-icon">♙</span><span class="nav-label">Usuários</span></a>
+            <a href="/settings" title="Configurações"><span class="nav-icon">⚙</span><span
+                    class="nav-label">Configurações</span></a>
+        </div>
+        <a href="/logout" class="nav-logout" title="Sair"><span class="nav-icon">↪</span><span
+                class="nav-label">Sair</span></a>
+    </nav>
+    <main class="content-wrapper">
+        {% block content %}{% endblock %}
+    </main>
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/player.js"></script>
+</body>
+
+</html>

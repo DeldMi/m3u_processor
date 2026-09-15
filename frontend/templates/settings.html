@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <h2>Parâmetros do Ambiente (.env) e Integrações</h2>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+        <div>
+            <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">Modo de Automação / Agendador</label>
+            <select id="cfg-mode">
+                <option value="DISABLED" {% if config.SCHEDULE_MODE == 'DISABLED' %}selected{% endif %}>Desativado (Manual)</option>
+                <option value="INTERVAL" {% if config.SCHEDULE_MODE == 'INTERVAL' %}selected{% endif %}>Por Intervalo Regular</option>
+                <option value="CRON" {% if config.SCHEDULE_MODE == 'CRON' %}selected{% endif %}>Horário Fixo Diário</option>
+            </select>
+        </div>
+        <div>
+            <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">Parâmetro de Tempo (Horas ou HH:MM)</label>
+            <input type="text" id="cfg-time" value="{{ config.SCHEDULE_INTERVAL_HOURS if config.SCHEDULE_MODE == 'INTERVAL' else config.SCHEDULE_CRON_TIME }}">
+        </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+        <div>
+            <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">URL Base Pública (BASE_URL)</label>
+            <input type="text" id="cfg-base-url" value="{{ config.BASE_URL }}">
+        </div>
+        <div>
+            <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">Capacidade Máxima por Lista</label>
+            <input type="number" id="cfg-max-channels" value="{{ config.MAX_CHANNELS_PER_FILE }}">
+        </div>
+    </div>
+
+    <div style="margin-bottom: 16px;">
+        <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">Token de Acesso à API Externa (Webhook Bearer Token)</label>
+        <input type="text" id="cfg-token" value="{{ config.API_TOKEN }}">
+    </div>
+
+    <div style="margin-bottom: 16px;">
+        <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">Links Remotos M3U (Separados por ';')</label>
+        <textarea id="cfg-m3u-urls">{{ config.REMOTE_M3U_URLS }}</textarea>
+    </div>
+
+    <div style="margin-bottom: 20px;">
+        <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">Links EPG XMLTV (iptv-epg.org ou outros, separados por ';')</label>
+        <textarea id="cfg-epg-urls">{{ config.EPG_URLS }}</textarea>
+    </div>
+
+    <button class="btn" style="background: var(--online);" onclick="salvarConfiguracoes()">Salvar Configurações</button>
+</div>
+
+<script>
+function salvarConfiguracoes() {
+    const mode = document.getElementById('cfg-mode').value;
+    const timeVal = document.getElementById('cfg-time').value;
+
+    const payload = {
+        SCHEDULE_MODE: mode,
+        BASE_URL: document.getElementById('cfg-base-url').value,
+        MAX_CHANNELS_PER_FILE: document.getElementById('cfg-max-channels').value,
+        API_TOKEN: document.getElementById('cfg-token').value,
+        REMOTE_M3U_URLS: document.getElementById('cfg-m3u-urls').value,
+        EPG_URLS: document.getElementById('cfg-epg-urls').value
+    };
+
+    if (mode === 'INTERVAL') payload.SCHEDULE_INTERVAL_HOURS = timeVal;
+    if (mode === 'CRON') payload.SCHEDULE_CRON_TIME = timeVal;
+
+    fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    }).then(r => r.json()).then(() => {
+        alert("Configurações gravadas com sucesso no arquivo .env!");
+        location.reload();
+    });
+}
+</script>
+{% endblock %}

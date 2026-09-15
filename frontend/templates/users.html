@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <h2>Gerenciamento de Acesso e Permissões (RBAC)</h2>
+    <form method="POST" action="/api/v1/users" style="display: grid; grid-template-columns: 2fr 2fr 1fr 1fr; gap: 12px; margin-bottom: 24px;">
+        <input type="text" name="username" placeholder="Nome de usuário" required>
+        <input type="password" name="password" placeholder="Senha de acesso" required>
+        <select name="role">
+            <option value="viewer">Viewer (Apenas visualização)</option>
+            <option value="editor">Editor (Edita e sincroniza)</option>
+            <option value="admin">Admin (Controle total)</option>
+        </select>
+        <button type="submit" class="btn" style="background: var(--online);">Criar Usuário</button>
+    </form>
+
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Usuário</th>
+                <th>Papel (Role)</th>
+                <th>Data de Criação</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in users %}
+            <tr>
+                <td>{{ u.id }}</td>
+                <td><b>{{ u.username }}</b></td>
+                <td><span style="text-transform: uppercase; font-size: 11px; background: var(--border); padding: 2px 6px; border-radius: 4px;">{{ u.role }}</span></td>
+                <td>{{ u.created_at }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

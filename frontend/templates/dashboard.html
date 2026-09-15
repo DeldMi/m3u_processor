@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-heading">
+    <div><span class="eyebrow">MONITORAMENTO AO VIVO</span>
+        <h1>Painel geral</h1>
+        <p>Visão operacional da auditoria, conectividade e geração das listas.</p>
+    </div>{% if user.role in ['admin', 'editor'] %}<button class="btn primary-action" id="btn-sync"
+        onclick="iniciarSincronizacao()">Iniciar sincronização</button>{% endif %}
+</section>
+<section class="metric-grid">
+    <article class="metric-card"><span>Status do processo</span><strong id="status">Ocioso</strong><small
+            id="last-update">Aguardando dados</small></article>
+    <article class="metric-card"><span>Canais catalogados</span><strong id="total">0</strong><small>base atual</small>
+    </article>
+    <article class="metric-card online-card"><span>Online</span><strong id="online">0</strong><small id="online-rate">0%
+            da base</small></article>
+    <article class="metric-card offline-card"><span>Offline / removidos</span><strong
+            id="offline">0</strong><small>última verificação</small></article>
+</section>
+<section class="dashboard-grid">
+    <article class="panel chart-panel">
+        <div class="panel-heading">
+            <div><span class="eyebrow">DISTRIBUIÇÃO</span>
+                <h2>Saúde dos canais</h2>
+            </div><span class="live-badge"><i></i> AO VIVO</span>
+        </div>
+        <div class="health-chart">
+            <div class="chart-donut" id="health-donut">
+                <div><strong id="donut-value">0%</strong><small>online</small></div>
+            </div>
+            <div class="chart-legend">
+                <div><i class="legend-online"></i><span>Online</span><b id="legend-online">0</b></div>
+                <div><i class="legend-offline"></i><span>Offline</span><b id="legend-offline">0</b></div>
+                <div><i class="legend-muted"></i><span>Não verificado</span><b id="legend-unknown">0</b></div>
+            </div>
+        </div>
+    </article>
+    <article class="panel activity-panel">
+        <div class="panel-heading">
+            <div><span class="eyebrow">ATIVIDADE</span>
+                <h2>O que está acontecendo</h2>
+            </div><span id="event-count">0 eventos</span>
+        </div>
+        <div id="activity-feed" class="activity-feed">
+            <div class="empty-state">Nenhuma atividade registrada.</div>
+        </div>
+    </article>
+</section>
+<section class="panel progress-panel">
+    <div class="panel-heading">
+        <div><span class="eyebrow">PIPELINE</span>
+            <h2>Progresso da operação</h2>
+        </div><span id="pipeline-label">Ocioso</span>
+    </div>
+    <div class="pipeline-track"><span id="pipeline-bar"></span></div>
+    <div class="pipeline-steps">
+        <span>Leitura</span><span>Verificação</span><span>Particionamento</span><span>Concluído</span></div>
+</section>
+<script>
+    function escapeDashboard(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c])); }
+    function atualizarDashboard() { fetch('/api/status').then(r => r.json()).then(d => { const total = Number(d.total_canais || 0), online = Number(d.canais_online || 0), offline = Number(d.canais_offline || 0), unknown = Math.max(0, total - online - offline), rate = total ? Math.round(online / total * 100) : 0; document.getElementById('status').innerText = d.status; document.getElementById('total').innerText = total; document.getElementById('online').innerText = online; document.getElementById('offline').innerText = offline; document.getElementById('online-rate').innerText = `${rate}% da base`; document.getElementById('donut-value').innerText = `${rate}%`; document.getElementById('legend-online').innerText = online; document.getElementById('legend-offline').innerText = offline; document.getElementById('legend-unknown').innerText = unknown; document.getElementById('event-count').innerText = `${d.log_count || 0} eventos`; document.getElementById('last-update').innerText = `Atualizado às ${new Date().toLocaleTimeString()}`; document.getElementById('pipeline-label').innerText = d.ultimo_log || d.status; document.getElementById('pipeline-bar').style.width = d.status === 'Executando...' ? '62%' : (d.status === 'Concluido' ? '100%' : '12%'); const btn = document.getElementById('btn-sync'); if (btn) btn.disabled = d.status === 'Executando...'; document.getElementById('health-donut').style.setProperty('--online-angle', `${rate * 3.6}deg`); document.getElementById('activity-feed').innerHTML = (d.logs || []).slice(0, 12).map(log => `<div class="activity-item ${escapeDashboard(log.level)}"><time>${escapeDashboard(log.timestamp)}</time><span>${escapeDashboard(log.message)}</span></div>`).join('') || '<div class="empty-state">Nenhuma atividade registrada.</div>'; }).catch(() => { }); }
+    function iniciarSincronizacao() { fetch('/api/v1/sync', { method: 'POST' }).then(atualizarDashboard); } setInterval(atualizarDashboard, 1500); atualizarDashboard();
+</script>
+{% endblock %}

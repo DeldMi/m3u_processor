@@ -1,0 +1,13 @@
+.git
+.gitignore
+.venv
+__pycache__
+**/__pycache__
+*.pyc
+frontend/react/node_modules
+frontend/react/dist
+input/*
+output/*
+logs/*
+data/*.db-journal
+.env

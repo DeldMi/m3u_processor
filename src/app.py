@@ -5,7 +5,7 @@ import glob
 import time
 from collections import deque
 from datetime import datetime
-from flask import Flask, render_template, jsonify, request, redirect, url_for, send_from_directory
+from flask import Flask, render_template, jsonify, request, redirect, url_for, send_from_directory, send_file
 from werkzeug.security import check_password_hash, generate_password_hash
 from src.manager import PlaylistManager
 from src.config import ConfigManager
@@ -16,6 +16,7 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 app = Flask(__name__, 
             template_folder=os.path.join(BASE_DIR, "frontend", "templates"),
             static_folder=os.path.join(BASE_DIR, "frontend", "static"))
+REACT_DIR = os.path.join(BASE_DIR, "frontend", "react", "dist")
 
 app.secret_key = ConfigManager(BASE_DIR).get_all().get("SECRET_KEY", "m3u_processor_secret_key_fixed")
 manager = PlaylistManager(BASE_DIR)
@@ -160,6 +161,12 @@ setup_scheduler()
 def inject_user():
     return dict(user=current_user())
 
+def serve_react_app():
+    index_path = os.path.join(REACT_DIR, "index.html")
+    if os.path.exists(index_path):
+        return send_file(index_path)
+    return None
+
 # --- AUTENTICACAO ---
 @app.route("/login", methods=["GET", "POST"])
 def auth_login():
@@ -172,6 +179,9 @@ def auth_login():
                 login_user(dict(user))
                 return redirect(url_for("view_dashboard"))
         return render_template("login.html", error="Credenciais invalidas.")
+    react_app = serve_react_app()
+    if react_app:
+        return react_app
     return render_template("login.html")
 
 @app.route("/logout")
@@ -185,21 +195,44 @@ def view_dashboard():
     # Se o usuario nao estiver logado, redireciona para login
     if not current_user():
         return redirect(url_for("auth_login"))
+    react_app = serve_react_app()
+    if react_app:
+        return react_app
     return render_template("dashboard.html")
+
+@app.route("/api/me")
+def api_me():
+    user = current_user()
+    if not user:
+        return jsonify({"user": None}), 401
+    return jsonify({"user": user})
+
+@app.route("/app-assets/<path:filename>")
+def react_assets(filename):
+    return send_from_directory(REACT_DIR, filename)
 
 @app.route("/playlists")
 @require_role("viewer")
 def view_playlists():
+    react_app = serve_react_app()
+    if react_app:
+        return react_app
     return render_template("playlists.html")
 
 @app.route("/channels")
 @require_role("viewer")
 def view_channels():
+    react_app = serve_react_app()
+    if react_app:
+        return react_app
     return render_template("channels.html")
 
 @app.route("/users")
 @require_role("admin")
 def view_users():
+    react_app = serve_react_app()
+    if react_app:
+        return react_app
     with manager.db.get_connection() as conn:
         users = [dict(u) for u in conn.execute("SELECT id, username, role, created_at FROM users;").fetchall()]
     return render_template("users.html", users=users)
@@ -207,6 +240,9 @@ def view_users():
 @app.route("/settings")
 @require_role("admin")
 def view_settings():
+    react_app = serve_react_app()
+    if react_app:
+        return react_app
     return render_template("settings.html", config=manager.config_mgr.get_all())
 
 # --- ENDPOINTS REST & TELEMETRIA ---
@@ -320,6 +356,11 @@ def api_save_config():
         manager.config_mgr.update_key(k, v)
     setup_scheduler()
     return jsonify({"status": "atualizado"})
+
+@app.route("/api/config", methods=["GET"])
+@require_role("admin")
+def api_get_config():
+    return jsonify(manager.config_mgr.get_all())
 
 # Servidores estaticos de arquivos M3U e XMLTV
 @app.route("/playlist/<filename>")

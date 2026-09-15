@@ -210,7 +210,9 @@ class PlaylistManager:
         channels = self.db.list_channels()
         return asyncio.run(self._generate_output_partitions(channels, profile))
 
-    async def sync_and_audit(self, progress_callback=None) -> Dict[str, Any]:
+    async def sync_and_audit(self, progress_callback=None, control_callback=None) -> Dict[str, Any]:
+        if control_callback:
+            control_callback("inicio")
         cfg = self.config_mgr.get_all()
         user_agent = cfg["USER_AGENT"]
         timeout = cfg["REQUEST_TIMEOUT"]
@@ -223,6 +225,8 @@ class PlaylistManager:
 
         # 1. Ingestao e classificacao taxonômica
         raw_channels = await self.load_all_sources()
+        if control_callback:
+            control_callback("fontes carregadas")
         total_raw = len(raw_channels)
 
         for ch in raw_channels:
@@ -259,6 +263,9 @@ class PlaylistManager:
             tasks = [test_stream(session, ch, semaphore, user_agent, timeout) for ch in channels_to_test]
             results = await asyncio.gather(*tasks)
 
+        if control_callback:
+            control_callback("verificação concluída")
+
         valid_list = []
         invalid_list = []
 
@@ -279,6 +286,9 @@ class PlaylistManager:
         # 4. Particionamento em lotes de no maximo 400 canais
         # IMPORTANTE: Inclui TODOS os canais operantes (sem descartar por categoria)
         active_channels = [c for c in self.db.list_channels() if c["status"] == "online"]
+
+        if control_callback:
+            control_callback("preparando listas")
 
         if progress_callback:
             progress_callback(f"Particionando {len(active_channels)} canais ativos (limite: {max_limit}/lista)...")
@@ -303,6 +313,8 @@ class PlaylistManager:
         chunks = [active_channels[i:i + max_limit] for i in range(0, len(active_channels), max_limit)]
 
         for idx, chunk in enumerate(chunks, start=1):
+            if control_callback:
+                control_callback(f"gerando lista {idx}")
             m3u_name = f"playlist_parte_{idx:02d}.m3u"
             xml_name = f"epg_parte_{idx:02d}.xml"
 

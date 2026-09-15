@@ -83,6 +83,29 @@ class Database:
                 );
             """)
 
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS process_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    level TEXT NOT NULL DEFAULT 'info',
+                    message TEXT NOT NULL,
+                    run_id INTEGER
+                );
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS process_runs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    finished_at DATETIME,
+                    status TEXT NOT NULL,
+                    total_canais INTEGER DEFAULT 0,
+                    canais_online INTEGER DEFAULT 0,
+                    canais_offline INTEGER DEFAULT 0,
+                    manifestos INTEGER DEFAULT 0,
+                    last_message TEXT
+                );
+            """)
+
             # Provisionamento obrigatorio de usuario root caso a base esteja vazia
             cursor.execute("SELECT COUNT(*) FROM users;")
             if cursor.fetchone()[0] == 0:
@@ -178,3 +201,44 @@ class Database:
             cursor = conn.execute(f"UPDATE channels SET {assignments} WHERE id = ?", [*changes.values(), channel_id])
             conn.commit()
             return cursor.rowcount > 0
+
+    def add_process_event(self, message: str, level: str = "info", run_id: Optional[int] = None):
+        with self.get_connection() as conn:
+            conn.execute(
+                "INSERT INTO process_events (level, message, run_id) VALUES (?, ?, ?)",
+                (level, message, run_id)
+            )
+            conn.commit()
+
+    def list_process_events(self, limit: int = 250) -> List[Dict[str, Any]]:
+        with self.get_connection() as conn:
+            rows = conn.execute(
+                "SELECT id, timestamp, level, message, run_id FROM process_events ORDER BY id DESC LIMIT ?",
+                (max(1, min(limit, 5000)),)
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def start_process_run(self) -> int:
+        with self.get_connection() as conn:
+            cursor = conn.execute("INSERT INTO process_runs (status) VALUES ('Executando...')")
+            conn.commit()
+            return cursor.lastrowid
+
+    def finish_process_run(self, run_id: int, status: str, result: Dict[str, Any], message: str):
+        with self.get_connection() as conn:
+            conn.execute("""
+                UPDATE process_runs
+                SET finished_at = CURRENT_TIMESTAMP, status = ?, total_canais = ?,
+                    canais_online = ?, canais_offline = ?, manifestos = ?, last_message = ?
+                WHERE id = ?
+            """, (status, result.get("total", 0), result.get("online", 0),
+                  result.get("offline", 0), len(result.get("partitions", [])), message, run_id))
+            conn.commit()
+
+    def list_process_runs(self, limit: int = 50) -> List[Dict[str, Any]]:
+        with self.get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM process_runs ORDER BY id DESC LIMIT ?",
+                (max(1, min(limit, 500)),)
+            ).fetchall()
+            return [dict(row) for row in rows]

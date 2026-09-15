@@ -4,8 +4,11 @@
     <div><span class="eyebrow">MONITORAMENTO AO VIVO</span>
         <h1>Painel geral</h1>
         <p>Visão operacional da auditoria, conectividade e geração das listas.</p>
-    </div>{% if user.role in ['admin', 'editor'] %}<button class="btn primary-action" id="btn-sync"
-        onclick="iniciarSincronizacao()">Iniciar sincronização</button>{% endif %}
+    </div>{% if user.role in ['admin', 'editor'] %}<div class="process-actions"><button class="btn primary-action"
+            id="btn-sync" onclick="iniciarSincronizacao()">Iniciar sincronização</button><button
+            class="btn secondary-action" id="btn-pause" onclick="alternarPausa()" disabled>Pausar</button><button
+            class="btn danger-action" id="btn-stop" onclick="interromperSincronizacao()" disabled>Interromper</button>
+    </div>{% endif %}
 </section>
 <section class="metric-grid">
     <article class="metric-card"><span>Status do processo</span><strong id="status">Ocioso</strong><small
@@ -54,11 +57,15 @@
     </div>
     <div class="pipeline-track"><span id="pipeline-bar"></span></div>
     <div class="pipeline-steps">
-        <span>Leitura</span><span>Verificação</span><span>Particionamento</span><span>Concluído</span></div>
+        <span>Leitura</span><span>Verificação</span><span>Particionamento</span><span>Concluído</span>
+    </div>
 </section>
 <script>
     function escapeDashboard(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c])); }
-    function atualizarDashboard() { fetch('/api/status').then(r => r.json()).then(d => { const total = Number(d.total_canais || 0), online = Number(d.canais_online || 0), offline = Number(d.canais_offline || 0), unknown = Math.max(0, total - online - offline), rate = total ? Math.round(online / total * 100) : 0; document.getElementById('status').innerText = d.status; document.getElementById('total').innerText = total; document.getElementById('online').innerText = online; document.getElementById('offline').innerText = offline; document.getElementById('online-rate').innerText = `${rate}% da base`; document.getElementById('donut-value').innerText = `${rate}%`; document.getElementById('legend-online').innerText = online; document.getElementById('legend-offline').innerText = offline; document.getElementById('legend-unknown').innerText = unknown; document.getElementById('event-count').innerText = `${d.log_count || 0} eventos`; document.getElementById('last-update').innerText = `Atualizado às ${new Date().toLocaleTimeString()}`; document.getElementById('pipeline-label').innerText = d.ultimo_log || d.status; document.getElementById('pipeline-bar').style.width = d.status === 'Executando...' ? '62%' : (d.status === 'Concluido' ? '100%' : '12%'); const btn = document.getElementById('btn-sync'); if (btn) btn.disabled = d.status === 'Executando...'; document.getElementById('health-donut').style.setProperty('--online-angle', `${rate * 3.6}deg`); document.getElementById('activity-feed').innerHTML = (d.logs || []).slice(0, 12).map(log => `<div class="activity-item ${escapeDashboard(log.level)}"><time>${escapeDashboard(log.timestamp)}</time><span>${escapeDashboard(log.message)}</span></div>`).join('') || '<div class="empty-state">Nenhuma atividade registrada.</div>'; }).catch(() => { }); }
-    function iniciarSincronizacao() { fetch('/api/v1/sync', { method: 'POST' }).then(atualizarDashboard); } setInterval(atualizarDashboard, 1500); atualizarDashboard();
+    function atualizarDashboard() { fetch('/api/status').then(r => r.json()).then(d => { const total = Number(d.total_canais || 0), online = Number(d.canais_online || 0), offline = Number(d.canais_offline || 0), unknown = Math.max(0, total - online - offline), rate = total ? Math.round(online / total * 100) : 0; document.getElementById('status').innerText = d.status; document.getElementById('total').innerText = total; document.getElementById('online').innerText = online; document.getElementById('offline').innerText = offline; document.getElementById('online-rate').innerText = `${rate}% da base`; document.getElementById('donut-value').innerText = `${rate}%`; document.getElementById('legend-online').innerText = online; document.getElementById('legend-offline').innerText = offline; document.getElementById('legend-unknown').innerText = unknown; document.getElementById('event-count').innerText = `${d.log_count || 0} eventos`; document.getElementById('last-update').innerText = `Atualizado às ${new Date().toLocaleTimeString()}`; document.getElementById('pipeline-label').innerText = d.ultimo_log || d.status; document.getElementById('pipeline-bar').style.width = d.status === 'Executando...' ? '62%' : (d.status === 'Concluido' ? '100%' : '12%'); const running = d.status === 'Executando...' || d.status === 'Pausado'; const btn = document.getElementById('btn-sync'); const pause = document.getElementById('btn-pause'); const stop = document.getElementById('btn-stop'); if (btn) btn.disabled = running; if (pause) { pause.disabled = !running; pause.innerText = d.status === 'Pausado' ? 'Retomar' : 'Pausar'; } if (stop) stop.disabled = !running; document.getElementById('health-donut').style.setProperty('--online-angle', `${rate * 3.6}deg`); document.getElementById('activity-feed').innerHTML = (d.logs || []).slice(0, 12).map(log => `<div class="activity-item ${escapeDashboard(log.level)}"><time>${escapeDashboard(log.timestamp)}</time><span>${escapeDashboard(log.message)}</span></div>`).join('') || '<div class="empty-state">Nenhuma atividade registrada.</div>'; }).catch(() => { }); }
+    function iniciarSincronizacao() { fetch('/api/v1/sync', { method: 'POST' }).then(atualizarDashboard); }
+    function alternarPausa() { fetch('/api/v1/sync/pause', { method: 'POST' }).then(atualizarDashboard); }
+    function interromperSincronizacao() { if (confirm('Interromper a execução atual?')) fetch('/api/v1/sync/stop', { method: 'POST' }).then(atualizarDashboard); }
+    setInterval(atualizarDashboard, 1500); atualizarDashboard();
 </script>
 {% endblock %}

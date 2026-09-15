@@ -1,6 +1,8 @@
 import os
 import threading
 import asyncio
+import glob
+import time
 from collections import deque
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request, redirect, url_for, send_from_directory
@@ -29,13 +31,69 @@ PROCESS_STATE = {
     "ultimo_log": "Sistema pronto para execucao."
 }
 PROCESS_LOGS = deque(maxlen=250)
+PAUSE_REQUESTED = threading.Event()
+STOP_REQUESTED = threading.Event()
+ACTIVE_RUN_ID = None
+
+class PipelineInterrupted(Exception):
+    pass
+
+def pipeline_checkpoint(stage: str):
+    global PROCESS_STATE
+    if STOP_REQUESTED.is_set():
+        raise PipelineInterrupted("Execução interrompida pelo usuário.")
+    while PAUSE_REQUESTED.is_set() and not STOP_REQUESTED.is_set():
+        PROCESS_STATE["status"] = "Pausado"
+        time.sleep(0.2)
+    if STOP_REQUESTED.is_set():
+        raise PipelineInterrupted("Execução interrompida pelo usuário.")
+    if PROCESS_STATE["status"] == "Pausado":
+        PROCESS_STATE["status"] = "Executando..."
+        add_process_log("Execução retomada.")
+
+PROCESS_LOGS.extend(manager.db.list_process_events(limit=250))
+LAST_RUNS = manager.db.list_process_runs(limit=1)
+if LAST_RUNS:
+    last_run = LAST_RUNS[0]
+    PROCESS_STATE.update({
+        "status": last_run["status"] if last_run["status"] != "Executando..." else "Interrompido",
+        "total_canais": last_run["total_canais"],
+        "canais_online": last_run["canais_online"],
+        "canais_offline": last_run["canais_offline"],
+        "ultimo_log": last_run["last_message"] or PROCESS_STATE["ultimo_log"]
+    })
 
 def add_process_log(message: str, level: str = "info"):
+    global ACTIVE_RUN_ID
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     PROCESS_LOGS.appendleft({
-        "timestamp": datetime.now().strftime("%H:%M:%S"),
+        "timestamp": timestamp,
         "level": level,
         "message": message
     })
+    manager.db.add_process_event(message, level, ACTIVE_RUN_ID)
+
+def get_output_manifests():
+    cfg = manager.config_mgr.get_all()
+    manifests = []
+    for m3u_path in sorted(glob.glob(os.path.join(manager.output_dir, "*.m3u"))):
+        m3u_name = os.path.basename(m3u_path)
+        xml_name = os.path.splitext(m3u_name)[0].replace("playlist_", "epg_") + ".xml"
+        xml_path = os.path.join(manager.output_dir, xml_name)
+        try:
+            with open(m3u_path, "r", encoding="utf-8", errors="ignore") as playlist_file:
+                total = sum(1 for line in playlist_file if line.startswith("#EXTINF:"))
+        except OSError:
+            total = 0
+        manifests.append({
+            "m3u_name": m3u_name,
+            "m3u_url": f"{cfg['BASE_URL']}/playlist/{m3u_name}",
+            "xml_name": xml_name,
+            "xml_url": f"{cfg['BASE_URL']}/epg/{xml_name}",
+            "total": total,
+            "xml_exists": os.path.exists(xml_path)
+        })
+    return manifests
 
 def update_log_state(message: str):
     global PROCESS_STATE
@@ -43,17 +101,20 @@ def update_log_state(message: str):
     add_process_log(message)
 
 def execute_pipeline():
-    global PROCESS_STATE
+    global PROCESS_STATE, ACTIVE_RUN_ID
     if PROCESS_STATE["status"] == "Executando...":
         return
 
+    STOP_REQUESTED.clear()
+    PAUSE_REQUESTED.clear()
+    ACTIVE_RUN_ID = manager.db.start_process_run()
     PROCESS_STATE["status"] = "Executando..."
     update_log_state("Iniciando auditoria completa...")
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
-        res = loop.run_until_complete(manager.sync_and_audit(progress_callback=update_log_state))
+        res = loop.run_until_complete(manager.sync_and_audit(progress_callback=update_log_state, control_callback=pipeline_checkpoint))
         PROCESS_STATE["total_canais"] = res.get("total", 0)
         PROCESS_STATE["canais_online"] = res.get("online", 0)
         PROCESS_STATE["canais_offline"] = res.get("offline", 0)
@@ -61,11 +122,21 @@ def execute_pipeline():
         PROCESS_STATE["status"] = "Concluido"
         PROCESS_STATE["ultimo_log"] = f"Sucesso! {res.get('online', 0)} canais operantes salvos em {len(res.get('partitions', []))} lista(s). Log: {res.get('log_file')}"
         add_process_log(PROCESS_STATE["ultimo_log"], "success")
+        manager.db.finish_process_run(ACTIVE_RUN_ID, "Concluido", res, PROCESS_STATE["ultimo_log"])
+    except PipelineInterrupted as exc:
+        PROCESS_STATE["status"] = "Interrompido"
+        PROCESS_STATE["ultimo_log"] = str(exc)
+        add_process_log(PROCESS_STATE["ultimo_log"], "warning")
+        manager.db.finish_process_run(ACTIVE_RUN_ID, "Interrompido", {}, PROCESS_STATE["ultimo_log"])
     except Exception as e:
         PROCESS_STATE["status"] = "Erro"
         PROCESS_STATE["ultimo_log"] = f"Falha na execucao: {str(e)}"
         add_process_log(PROCESS_STATE["ultimo_log"], "error")
+        manager.db.finish_process_run(ACTIVE_RUN_ID, "Erro", {}, PROCESS_STATE["ultimo_log"])
     finally:
+        PAUSE_REQUESTED.clear()
+        STOP_REQUESTED.clear()
+        ACTIVE_RUN_ID = None
         loop.close()
 
 def setup_scheduler():
@@ -144,17 +215,50 @@ def get_status():
     data = dict(PROCESS_STATE)
     data["logs"] = list(PROCESS_LOGS)
     data["log_count"] = len(PROCESS_LOGS)
+    data["historico"] = manager.db.list_process_runs(limit=20)
     return jsonify(data)
 
 @app.route("/api/v1/logs")
 @require_role("viewer")
 def api_get_logs():
-    return jsonify(list(PROCESS_LOGS))
+    return jsonify(manager.db.list_process_events(limit=1000))
+
+@app.route("/api/v1/history")
+@require_role("viewer")
+def api_get_history():
+    return jsonify(manager.db.list_process_runs(limit=100))
+
+@app.route("/api/v1/sync/pause", methods=["POST"])
+@require_role("editor")
+def api_pause_sync():
+    if PROCESS_STATE["status"] != "Executando..." and PROCESS_STATE["status"] != "Pausado":
+        return jsonify({"status": "inativo"}), 409
+    if PAUSE_REQUESTED.is_set():
+        PAUSE_REQUESTED.clear()
+        PROCESS_STATE["status"] = "Executando..."
+        add_process_log("Execução retomada pelo usuário.")
+        return jsonify({"status": "retomado"})
+    PAUSE_REQUESTED.set()
+    PROCESS_STATE["status"] = "Pausado"
+    add_process_log("Execução pausada pelo usuário.", "warning")
+    return jsonify({"status": "pausado"})
+
+@app.route("/api/v1/sync/stop", methods=["POST"])
+@require_role("editor")
+def api_stop_sync():
+    if PROCESS_STATE["status"] not in ("Executando...", "Pausado"):
+        return jsonify({"status": "inativo"}), 409
+    STOP_REQUESTED.set()
+    PAUSE_REQUESTED.clear()
+    add_process_log("Interrupção solicitada pelo usuário.", "warning")
+    return jsonify({"status": "interrupcao_solicitada"})
 
 @app.route("/api/v1/playlists")
 @require_role("viewer")
 def api_get_playlists():
-    return jsonify({"status": PROCESS_STATE["status"], "manifestos": PROCESS_STATE["manifestos"]})
+    manifests = get_output_manifests()
+    PROCESS_STATE["manifestos"] = manifests
+    return jsonify({"status": PROCESS_STATE["status"], "manifestos": manifests})
 
 @app.route("/api/v1/channels", methods=["GET"])
 @require_role("viewer")
@@ -175,6 +279,7 @@ def api_update_channel(ch_id):
 @require_role("editor")
 def api_generate_custom_playlist():
     manifests = manager.generate_custom_playlist(request.json or {})
+    PROCESS_STATE["manifestos"] = manifests
     add_process_log(f"Lista personalizada gerada com {len(manifests)} arquivo(s).", "success")
     return jsonify({"status": "gerado", "manifestos": manifests})
 

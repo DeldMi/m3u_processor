@@ -38,7 +38,7 @@
 </section>
 <script>
     function loadPlaylists() { fetch('/api/v1/playlists').then(r => r.json()).then(data => { document.getElementById('playlist-status').innerHTML = `<i></i> ${data.status}`; const body = document.getElementById('playlists-body'); body.innerHTML = (data.manifestos || []).map(m => `<tr><td><strong>${m.m3u_name}</strong></td><td>${m.total}</td><td><a class="file-link" href="${m.m3u_url}" target="_blank">${m.m3u_url}</a></td><td><a class="file-link" href="${m.xml_url}" target="_blank">${m.xml_url}</a></td><td><button class="icon-action" onclick="copyLink('${m.m3u_url}')" title="Copiar link M3U">Copiar</button></td></tr>`).join('') || '<tr><td colspan="5" class="empty-state">Nenhuma lista criada nesta sessão.</td></tr>'; }).catch(() => { }); }
-    +function copyLink(link) { navigator.clipboard?.writeText(link); }
-        + loadPlaylists(); setInterval(loadPlaylists, 2000);
-    +</script>
-+{% endblock %}
+    function copyLink(link) { navigator.clipboard?.writeText(link); }
+    loadPlaylists(); setInterval(loadPlaylists, 2000);
+</script>
+{% endblock %}

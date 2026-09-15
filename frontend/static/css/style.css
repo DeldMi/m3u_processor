@@ -83,6 +83,7 @@ select, input, textarea { background: var(--bg-main); border: 1px solid var(--bo
 .btn { background: var(--accent); color: #fff; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; }
 .btn:hover { opacity: 0.9; }
 .primary-action { padding: 11px 18px; }.table-scroll { overflow-x: auto; }.file-link { color: var(--accent); text-decoration: none; font-size: 12px; }.icon-action { border: 1px solid var(--border); color: var(--accent); background: transparent; padding: 6px 9px; border-radius: 4px; cursor: pointer; }.link-help p { color: var(--text-muted); font-size: 13px; }
+.process-actions { display: flex; gap: 8px; flex-wrap: wrap; }.secondary-action { background: #475569; }.danger-action { background: var(--offline); }
 
 .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); justify-content: center; align-items: center; }
 .modal-content { background: var(--bg-card); padding: 20px; border-radius: 8px; width: 640px; position: relative; }

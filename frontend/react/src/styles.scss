@@ -2,16 +2,22 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-$ink: #eef5f7;
-$muted: #8ca2aa;
-$line: #20343c;
-$surface: #102128;
-$blue: #37b6d1;
-$green: #44d39a;
-$red: #ff6b6b;
+$ink: #f4f7f8;
+$muted: #9baeb4;
+$line: #263943;
+$surface: #14232d;
+$blue: #46c3df;
+$green: #56d6a1;
+$red: #f27777;
 
 * {
     box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+    min-height: 100%;
 }
 
 body {
@@ -21,6 +27,12 @@ body {
     font-family: 'DM Sans', sans-serif;
 }
 
+h1,
+h2,
+p {
+    color: inherit;
+}
+
 button,
 input,
 select,
@@ -28,29 +40,68 @@ textarea {
     font: inherit;
 }
 
-button {
-    cursor: pointer;
-}
-
-a {
-    color: $blue;
-    text-decoration: none;
-}
-
 .app-shell {
     min-height: 100vh;
-    background: radial-gradient(circle at 78% 0%, #14313a 0, transparent 30%), #071116;
+    background: radial-gradient(circle at 78% 0%, #17333c 0, transparent 31%), #071116;
 }
 
 .sidebar {
     position: fixed;
     inset: 0 auto 0 0;
+    z-index: 4;
     width: 240px;
     padding: 26px 16px 20px;
     border-right: 1px solid $line;
-    background: rgba(7, 17, 22, .9);
-    z-index: 4;
-    transition: width .2s;
+    background: rgba(7, 17, 22, .94);
+    transition: width .2s ease;
+}
+
+.editor-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 14px 0;
+}
+
+.editor-actions label {
+    color: $muted;
+    font-size: 12px;
+}
+
+.pagination {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    color: $muted;
+    font-size: 12px;
+}
+
+.page-size {
+    width: 82px !important;
+}
+
+.user-form {
+    display: grid;
+    grid-template-columns: 2fr 2fr 1fr auto;
+    gap: 12px;
+    margin-bottom: 22px;
+}
+
+.user-form input,
+.user-form select {
+    min-width: 0;
+}
+
+@media (max-width: 800px) {
+    .user-form {
+        grid-template-columns: 1fr;
+    }
+
+    .pagination {
+        margin-left: 0;
+    }
 }
 
 .brand {
@@ -456,12 +507,14 @@ a {
     display: flex;
     gap: 10px;
     align-items: center;
+    flex-wrap: wrap;
     margin-bottom: 19px;
 }
 
 .search {
     display: flex;
     flex: 1;
+    min-width: min(100%, 280px);
     align-items: center;
     gap: 9px;
     padding: 0 12px;
@@ -494,6 +547,8 @@ textarea {
 
 .toolbar select {
     width: 170px;
+    flex: 1 1 150px;
+    min-width: 145px;
 }
 
 .toolbar-count {
@@ -539,7 +594,8 @@ td {
 }
 
 .channel-name img,
-.logo-placeholder {
+.logo-placeholder,
+.channel-logo {
     display: grid;
     place-items: center;
     width: 27px;
@@ -547,6 +603,17 @@ td {
     object-fit: contain;
     border-radius: 5px;
     background: #08171c;
+}
+
+.channel-logo {
+    flex: 0 0 27px;
+    overflow: hidden;
+}
+
+.channel-logo img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
 }
 
 .tag {
@@ -772,5 +839,54 @@ td {
 
     .login-card {
         padding: 28px;
+    }
+
+    .editor-actions {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+        padding: 14px 0;
+    }
+
+    .editor-actions label,
+    .user-form label {
+        color: $muted;
+        font-size: 12px;
+    }
+
+    .pagination {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-left: auto;
+        color: $muted;
+        font-size: 12px;
+    }
+
+    .page-size {
+        width: 82px !important;
+    }
+
+    .user-form {
+        display: grid;
+        grid-template-columns: 2fr 2fr 1fr auto;
+        gap: 12px;
+        margin-bottom: 22px;
+    }
+
+    .user-form input,
+    .user-form select {
+        min-width: 0;
+    }
+
+    @media (max-width: 800px) {
+        .user-form {
+            grid-template-columns: 1fr;
+        }
+
+        .pagination {
+            margin-left: 0;
+        }
     }
 }

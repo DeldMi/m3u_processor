@@ -202,6 +202,40 @@ class Database:
             conn.commit()
             return cursor.rowcount > 0
 
+    def list_users(self) -> List[Dict[str, Any]]:
+        with self.get_connection() as conn:
+            return [dict(row) for row in conn.execute(
+                "SELECT id, username, role, created_at FROM users ORDER BY id"
+            ).fetchall()]
+
+    def create_user(self, username: str, password: str, role: str) -> bool:
+        if role not in {"admin", "editor", "viewer"} or not username or not password:
+            return False
+        with self.get_connection() as conn:
+            try:
+                conn.execute(
+                    "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+                    (username.strip(), generate_password_hash(password), role),
+                )
+                conn.commit()
+                return True
+            except sqlite3.IntegrityError:
+                return False
+
+    def update_user(self, user_id: int, values: Dict[str, Any]) -> bool:
+        changes = {}
+        if values.get("role") in {"admin", "editor", "viewer"}:
+            changes["role"] = values["role"]
+        if values.get("password"):
+            changes["password_hash"] = generate_password_hash(values["password"])
+        if not changes:
+            return False
+        assignments = ", ".join(f"{key} = ?" for key in changes)
+        with self.get_connection() as conn:
+            cursor = conn.execute(f"UPDATE users SET {assignments} WHERE id = ?", [*changes.values(), user_id])
+            conn.commit()
+            return cursor.rowcount > 0
+
     def add_process_event(self, message: str, level: str = "info", run_id: Optional[int] = None):
         with self.get_connection() as conn:
             conn.execute(

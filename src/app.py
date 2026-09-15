@@ -3,6 +3,7 @@ import threading
 import asyncio
 import glob
 import time
+import re
 from collections import deque
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request, redirect, url_for, send_from_directory, send_file
@@ -233,9 +234,7 @@ def view_users():
     react_app = serve_react_app()
     if react_app:
         return react_app
-    with manager.db.get_connection() as conn:
-        users = [dict(u) for u in conn.execute("SELECT id, username, role, created_at FROM users;").fetchall()]
-    return render_template("users.html", users=users)
+    return render_template("users.html", users=manager.db.list_users())
 
 @app.route("/settings")
 @require_role("admin")
@@ -296,6 +295,57 @@ def api_get_playlists():
     PROCESS_STATE["manifestos"] = manifests
     return jsonify({"status": PROCESS_STATE["status"], "manifestos": manifests})
 
+@app.route("/api/v1/playlists", methods=["DELETE"])
+@require_role("editor")
+def api_delete_playlists():
+    names = (request.json or {}).get("m3u_names", [])
+    deleted = []
+    for m3u_name in names:
+        if not isinstance(m3u_name, str) or not m3u_name.startswith("playlist_") or not m3u_name.endswith(".m3u"):
+            continue
+        m3u_path = os.path.join(manager.output_dir, os.path.basename(m3u_name))
+        xml_name = os.path.splitext(os.path.basename(m3u_name))[0].replace("playlist_", "epg_") + ".xml"
+        xml_path = os.path.join(manager.output_dir, xml_name)
+        for path in (m3u_path, xml_path):
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+        deleted.append(os.path.basename(m3u_name))
+    PROCESS_STATE["manifestos"] = get_output_manifests()
+    add_process_log(f"Removida(s) {len(deleted)} lista(s) publicada(s).", "warning")
+    return jsonify({"status": "removido", "deleted": deleted})
+
+@app.route("/api/v1/playlists/<path:m3u_name>", methods=["PATCH"])
+@require_role("editor")
+def api_rename_playlist(m3u_name):
+    old_name = os.path.basename(m3u_name)
+    new_label = str((request.json or {}).get("name", "")).strip()
+    match = re.fullmatch(r"playlist(?:_[A-Za-z0-9_-]+)?_parte_(\d{2})\.m3u", old_name)
+    safe_label = re.sub(r"[^a-zA-Z0-9_-]+", "_", new_label).strip("_-")
+    if not match or not safe_label:
+        return jsonify({"error": "Nome ou lista inválida"}), 400
+    old_xml = os.path.splitext(old_name)[0].replace("playlist_", "epg_") + ".xml"
+    new_name = f"playlist_{safe_label}_parte_{match.group(1)}.m3u"
+    new_xml = f"epg_{safe_label}_parte_{match.group(1)}.xml"
+    old_m3u_path = os.path.join(manager.output_dir, old_name)
+    old_xml_path = os.path.join(manager.output_dir, old_xml)
+    new_m3u_path = os.path.join(manager.output_dir, new_name)
+    new_xml_path = os.path.join(manager.output_dir, new_xml)
+    if not os.path.isfile(old_m3u_path) or not os.path.isfile(old_xml_path):
+        return jsonify({"error": "Lista ou XML não encontrado"}), 404
+    if old_name != new_name and (os.path.exists(new_m3u_path) or os.path.exists(new_xml_path)):
+        return jsonify({"error": "Já existe uma lista com esse nome"}), 409
+    with open(old_m3u_path, "r", encoding="utf-8", errors="ignore") as playlist_file:
+        content = playlist_file.read().replace(f"/epg/{old_xml}", f"/epg/{new_xml}")
+    with open(old_m3u_path, "w", encoding="utf-8") as playlist_file:
+        playlist_file.write(content)
+    os.replace(old_m3u_path, new_m3u_path)
+    os.replace(old_xml_path, new_xml_path)
+    PROCESS_STATE["manifestos"] = get_output_manifests()
+    add_process_log(f"Lista renomeada para {new_name}.", "success")
+    return jsonify({"status": "atualizado", "m3u_name": new_name, "xml_name": new_xml})
+
 @app.route("/api/v1/channels", methods=["GET"])
 @require_role("viewer")
 def api_get_channels():
@@ -303,6 +353,23 @@ def api_get_channels():
     category = request.args.get("category")
     status = request.args.get("status")
     return jsonify(manager.db.list_channels(country, category, status, request.args.get("search", ""), request.args.get("sort", "id"), request.args.get("direction", "asc")))
+
+@app.route("/api/v1/users", methods=["GET", "POST"])
+@require_role("admin")
+def api_users():
+    if request.method == "POST":
+        data = request.json if request.is_json else request.form
+        if not manager.db.create_user(data.get("username", ""), data.get("password", ""), data.get("role", "viewer")):
+            return jsonify({"error": "Usuário inválido ou já existente"}), 400
+        return jsonify({"status": "criado"}), 201
+    return jsonify(manager.db.list_users())
+
+@app.route("/api/v1/users/<int:user_id>", methods=["PATCH"])
+@require_role("admin")
+def api_update_user(user_id):
+    if not manager.db.update_user(user_id, request.json or {}):
+        return jsonify({"error": "Usuário não encontrado ou sem alterações"}), 404
+    return jsonify({"status": "atualizado"})
 
 @app.route("/api/v1/channels/<int:ch_id>", methods=["PATCH"])
 @require_role("editor")

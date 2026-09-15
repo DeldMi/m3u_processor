@@ -3,6 +3,7 @@ import glob
 import json
 import asyncio
 import logging
+import re
 import aiohttp
 from datetime import datetime
 from typing import List, Dict, Any, Tuple
@@ -157,18 +158,22 @@ class PlaylistManager:
         reverse = profile.get("direction", "asc").lower() == "desc"
         selected.sort(key=lambda channel: str(channel.get(sort_field, "")).lower(), reverse=reverse)
 
-        for f in glob.glob(os.path.join(self.output_dir, "*.*")):
-            try:
-                os.remove(f)
-            except OSError:
-                pass
+        if not profile.get("preserve_existing"):
+            for f in glob.glob(os.path.join(self.output_dir, "*.*")):
+                try:
+                    os.remove(f)
+                except OSError:
+                    pass
 
         manifests = []
+        playlist_name = str(profile.get("name", "")).strip()
+        safe_name = re.sub(r"[^a-zA-Z0-9_-]+", "_", playlist_name).strip("_-")
+        file_prefix = f"_{safe_name}" if safe_name else ""
         chunks = [selected[i:i + max_limit] for i in range(0, len(selected), max_limit)]
 
         for idx, chunk in enumerate(chunks, start=1):
-            m3u_name = f"playlist_parte_{idx:02d}.m3u"
-            xml_name = f"epg_parte_{idx:02d}.xml"
+            m3u_name = f"playlist{file_prefix}_parte_{idx:02d}.m3u"
+            xml_name = f"epg{file_prefix}_parte_{idx:02d}.xml"
             m3u_path = os.path.join(self.output_dir, m3u_name)
             xml_path = os.path.join(self.output_dir, xml_name)
 
@@ -208,7 +213,7 @@ class PlaylistManager:
 
     def generate_custom_playlist(self, profile: Dict[str, Any]) -> List[Dict[str, Any]]:
         channels = self.db.list_channels()
-        return asyncio.run(self._generate_output_partitions(channels, profile))
+        return asyncio.run(self._generate_output_partitions(channels, {**profile, "preserve_existing": True}))
 
     async def sync_and_audit(self, progress_callback=None, control_callback=None) -> Dict[str, Any]:
         if control_callback:

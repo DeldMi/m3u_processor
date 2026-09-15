@@ -16,10 +16,12 @@ class ConfigManager:
             "REQUEST_TIMEOUT": int(config.get("REQUEST_TIMEOUT", 6)),
             "USER_AGENT": config.get("USER_AGENT", "VLC/3.0.18 LibVLC/3.0.18"),
             "REMOTE_M3U_URLS": config.get("REMOTE_M3U_URLS", ""),
+            "EPG_URLS": config.get("EPG_URLS", "https://iptv-epg.org/files/brazil.xml.gz"),
+            "BASE_URL": config.get("BASE_URL", "http://127.0.0.1:5000").rstrip("/"),
             "SCHEDULE_MODE": config.get("SCHEDULE_MODE", "DISABLED").upper(),
             "SCHEDULE_INTERVAL_HOURS": int(config.get("SCHEDULE_INTERVAL_HOURS", 12)),
             "SCHEDULE_CRON_TIME": config.get("SCHEDULE_CRON_TIME", "03:00"),
-            "WEB_HOST": config.get("WEB_HOST", "127.0.0.1"),
+            "WEB_HOST": config.get("WEB_HOST", "0.0.0.0"),
             "WEB_PORT": int(config.get("WEB_PORT", 5000))
         }
 

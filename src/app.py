@@ -1,7 +1,7 @@
 import os
 import threading
 import asyncio
-from flask import Flask, render_template_string, jsonify, request
+from flask import Flask, render_template_string, jsonify, request, send_from_directory, abort
 from apscheduler.schedulers.background import BackgroundScheduler
 from src.manager import PlaylistManager
 from src.config import ConfigManager
@@ -19,8 +19,8 @@ PROCESS_STATE = {
     "total_canais": 0,
     "canais_online": 0,
     "canais_offline": 0,
-    "arquivos_gerados": [],
-    "ultimo_log": "Pronto para execucao."
+    "manifestos": [],
+    "ultimo_log": "Sistema pronto para execucao."
 }
 
 def execute_pipeline():
@@ -29,7 +29,7 @@ def execute_pipeline():
         return
 
     PROCESS_STATE["status"] = "Executando..."
-    PROCESS_STATE["ultimo_log"] = "Carregando canais locais e remotos..."
+    PROCESS_STATE["ultimo_log"] = "Deduplicando e coletando canais (locais, historicos e remotos)..."
 
     channels = asyncio.run(manager.load_all_channels())
     total = len(channels)
@@ -37,22 +37,22 @@ def execute_pipeline():
 
     if total == 0:
         PROCESS_STATE["status"] = "Finalizado (Vazio)"
-        PROCESS_STATE["ultimo_log"] = "Nenhum canal encontrado nas fontes locais ou remotas."
+        PROCESS_STATE["ultimo_log"] = "Nenhum canal localizado para validar."
         return
 
-    PROCESS_STATE["ultimo_log"] = f"Validando {total} canais de forma concorrente..."
+    PROCESS_STATE["ultimo_log"] = f"Validando integridade de {total} canais unicos com bypass SSL..."
     valid, invalid = asyncio.run(manager.validate_channels(channels))
 
     PROCESS_STATE["canais_online"] = len(valid)
     PROCESS_STATE["canais_offline"] = len(invalid)
 
-    PROCESS_STATE["ultimo_log"] = "Particionando canais em lotes..."
-    created_files = manager.save_partitioned_playlists(valid)
-    PROCESS_STATE["arquivos_gerados"] = created_files
+    PROCESS_STATE["ultimo_log"] = "Particionando lotes de no maximo 400 canais e sincronizando EPGs..."
+    manifests = asyncio.run(manager.process_and_partition(valid))
+    PROCESS_STATE["manifestos"] = manifests
 
-    log_path = manager.generate_audit_log(total, valid, invalid, created_files)
+    log_path = manager.generate_audit_log(total, valid, invalid, manifests)
     PROCESS_STATE["status"] = "Concluido"
-    PROCESS_STATE["ultimo_log"] = f"Sucesso! {len(valid)} canais ativos distribuídos em {len(created_files)} arquivo(s). Log: {os.path.basename(log_path)}"
+    PROCESS_STATE["ultimo_log"] = f"Finalizado! {len(valid)} ativos salvos em {len(manifests)} bloco(s). Removidos: {len(invalid)}. Log: {os.path.basename(log_path)}"
 
 def setup_scheduler():
     scheduler.remove_all_jobs()
@@ -63,14 +63,12 @@ def setup_scheduler():
         hours = max(1, cfg["SCHEDULE_INTERVAL_HOURS"])
         scheduler.add_job(execute_pipeline, 'interval', hours=hours, id="m3u_job")
     elif mode == "CRON":
-        cron_time = cfg["SCHEDULE_CRON_TIME"]
         try:
-            h, m = cron_time.split(":")
+            h, m = cfg["SCHEDULE_CRON_TIME"].split(":")
             scheduler.add_job(execute_pipeline, 'cron', hour=int(h), minute=int(m), id="m3u_job")
         except Exception:
             pass
 
-# Configura o agendamento inicial baseado no .env
 setup_scheduler()
 
 HTML_TEMPLATE = """
@@ -78,10 +76,10 @@ HTML_TEMPLATE = """
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Painel de Controle e Auditoria M3U</title>
+    <title>Painel de Controle M3U e Guia EPG</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0b0f19; color: #f1f5f9; margin: 0; padding: 24px; }
-        .container { max-width: 1000px; margin: 0 auto; }
+        .container { max-width: 1100px; margin: 0 auto; }
         .card { background: #1e293b; border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 1px solid #334155; }
         h1, h2, h3 { color: #38bdf8; margin-top: 0; }
         .grid-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
@@ -91,72 +89,91 @@ HTML_TEMPLATE = """
         .btn { background: #0284c7; color: #fff; border: none; padding: 10px 20px; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; }
         .btn:hover { background: #0369a1; }
         .btn:disabled { background: #475569; cursor: not-allowed; }
-        pre { background: #000; padding: 12px; border-radius: 6px; color: #4ade80; font-size: 12px; max-height: 180px; overflow-y: auto; }
+        pre { background: #000; padding: 12px; border-radius: 6px; color: #4ade80; font-size: 12px; max-height: 140px; overflow-y: auto; }
         .form-group { margin-bottom: 15px; }
         label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 5px; }
         input, select, textarea { width: 100%; padding: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; box-sizing: border-box; }
-        textarea { height: 75px; resize: vertical; }
+        textarea { height: 65px; resize: vertical; }
         .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { text-align: left; padding: 10px; border-bottom: 1px solid #334155; font-size: 13px; }
+        th { color: #94a3b8; }
+        .link-copy { background: #0f172a; padding: 4px 8px; border-radius: 4px; border: 1px solid #334155; font-family: monospace; color: #38bdf8; word-break: break-all; }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="card">
-        <h1>Painel de Controle M3U/M3U8</h1>
+        <h1>Painel Gerenciador de Listas e Guias EPG</h1>
         <div class="grid-metrics">
             <div class="metric"><div class="metric-title">Status</div><div class="metric-value" id="status">Ocioso</div></div>
-            <div class="metric"><div class="metric-title">Total Lido</div><div class="metric-value" id="total">0</div></div>
+            <div class="metric"><div class="metric-title">Total Processado</div><div class="metric-value" id="total">0</div></div>
             <div class="metric"><div class="metric-title">Operantes</div><div class="metric-value" style="color: #4ade80;" id="online">0</div></div>
-            <div class="metric"><div class="metric-title">Inoperantes</div><div class="metric-value" style="color: #f87171;" id="offline">0</div></div>
+            <div class="metric"><div class="metric-title">Removidos / Offline</div><div class="metric-value" style="color: #f87171;" id="offline">0</div></div>
         </div>
-        <button class="btn" id="btn-run" onclick="iniciarProcessamento()">Processar Agora</button>
+        <button class="btn" id="btn-run" onclick="iniciarProcessamento()">Processar e Reorganizar Agora</button>
     </div>
 
     <div class="card">
-        <h2>Configurações do Ambiente (.env)</h2>
+        <h2>Links dos Arquivos Gerados (Diretos para Player / IPTV)</h2>
+        <table id="links-table">
+            <thead>
+                <tr>
+                    <th>Partição</th>
+                    <th>Canais</th>
+                    <th>Link M3U / M3U8</th>
+                    <th>Link Guia EPG (XMLTV)</th>
+                </tr>
+            </thead>
+            <tbody id="links-body">
+                <tr><td colspan="4" style="text-align: center; color: #94a3b8;">Nenhum lote gerado até o momento.</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Configurações do Ambiente e Automação (.env)</h2>
         <div class="form-row">
             <div class="form-group">
-                <label>Modo de Agendamento Automático:</label>
+                <label>Modo de Repetição / Agendador:</label>
                 <select id="cfg-schedule-mode">
-                    <option value="DISABLED">Desativado (Execução Manual)</option>
-                    <option value="INTERVAL">Por Intervalo Regular</option>
-                    <option value="CRON">Horário Diário Fixo</option>
+                    <option value="DISABLED">Desativado (Manual)</option>
+                    <option value="INTERVAL">Por Intervalo (Horas)</option>
+                    <option value="CRON">Horário Fixo Diário</option>
                 </select>
             </div>
             <div class="form-group">
                 <label>Parâmetro de Tempo:</label>
-                <input type="text" id="cfg-schedule-val" placeholder="Ex: 12 (horas) ou 03:00 (diário)">
+                <input type="text" id="cfg-schedule-val" placeholder="Ex: 12 (horas) ou 03:00 (horário diário)">
             </div>
         </div>
 
         <div class="form-row">
             <div class="form-group">
-                <label>Máximo de Canais por Arquivo (Default: 400):</label>
-                <input type="number" id="cfg-max-channels">
+                <label>URL Base Pública do Servidor (BASE_URL):</label>
+                <input type="text" id="cfg-base-url" placeholder="http://127.0.0.1:5000">
             </div>
             <div class="form-group">
-                <label>Limite de Conexões Simultâneas (Concorrência):</label>
-                <input type="number" id="cfg-concurrency">
+                <label>Máximo de Canais por Arquivo:</label>
+                <input type="number" id="cfg-max-channels" value="400">
             </div>
         </div>
 
         <div class="form-group">
-            <label>Timeout por Canal (Segundos):</label>
-            <input type="number" id="cfg-timeout">
+            <label>Links de Listas M3U Remotas (Separadas por ';'):</label>
+            <textarea id="cfg-m3u-urls" placeholder="http://servidor.com/lista.m3u; https://outro.com/lista.m3u8"></textarea>
         </div>
 
         <div class="form-group">
-            <label>Listas Remotas (URLs separadas por ponto e vírgula ';'):</label>
-            <textarea id="cfg-urls" placeholder="http://exemplo.com/lista1.m3u; http://exemplo.com/lista2.m3u8"></textarea>
+            <label>Links de Guias EPG XMLTV (iptv-epg.org ou outros, separados por ';'):</label>
+            <textarea id="cfg-epg-urls" placeholder="https://iptv-epg.org/files/brazil.xml.gz; https://iptv-epg.org/files/portugal.xml.gz"></textarea>
         </div>
 
-        <button class="btn" style="background: #10b981;" onclick="salvarConfiguracoes()">Salvar Configurações</button>
+        <button class="btn" style="background: #10b981;" onclick="salvarConfiguracoes()">Salvar Configurações no .env</button>
     </div>
 
     <div class="card">
-        <h3>Arquivos Gerados na Pasta Output</h3>
-        <ul id="files-list" style="color: #38bdf8;"><li>Nenhum arquivo gerado nesta sessão.</li></ul>
-        <h3>Console de Eventos</h3>
+        <h3>Log de Operações em Tempo Real</h3>
         <pre id="log-output">Pronto.</pre>
     </div>
 </div>
@@ -168,10 +185,10 @@ function carregarConfig() {
         .then(data => {
             document.getElementById('cfg-schedule-mode').value = data.SCHEDULE_MODE;
             document.getElementById('cfg-schedule-val').value = (data.SCHEDULE_MODE === 'INTERVAL') ? data.SCHEDULE_INTERVAL_HOURS : data.SCHEDULE_CRON_TIME;
+            document.getElementById('cfg-base-url').value = data.BASE_URL;
             document.getElementById('cfg-max-channels').value = data.MAX_CHANNELS_PER_FILE;
-            document.getElementById('cfg-concurrency').value = data.CONCURRENCY_LIMIT;
-            document.getElementById('cfg-timeout').value = data.REQUEST_TIMEOUT;
-            document.getElementById('cfg-urls').value = data.REMOTE_M3U_URLS;
+            document.getElementById('cfg-m3u-urls').value = data.REMOTE_M3U_URLS;
+            document.getElementById('cfg-epg-urls').value = data.EPG_URLS;
         });
 }
 
@@ -181,24 +198,21 @@ function salvarConfiguracoes() {
 
     const payload = {
         SCHEDULE_MODE: mode,
+        BASE_URL: document.getElementById('cfg-base-url').value,
         MAX_CHANNELS_PER_FILE: document.getElementById('cfg-max-channels').value,
-        CONCURRENCY_LIMIT: document.getElementById('cfg-concurrency').value,
-        REQUEST_TIMEOUT: document.getElementById('cfg-timeout').value,
-        REMOTE_M3U_URLS: document.getElementById('cfg-urls').value
+        REMOTE_M3U_URLS: document.getElementById('cfg-m3u-urls').value,
+        EPG_URLS: document.getElementById('cfg-epg-urls').value
     };
 
-    if (mode === 'INTERVAL') {
-        payload.SCHEDULE_INTERVAL_HOURS = val;
-    } else if (mode === 'CRON') {
-        payload.SCHEDULE_CRON_TIME = val;
-    }
+    if (mode === 'INTERVAL') payload.SCHEDULE_INTERVAL_HOURS = val;
+    if (mode === 'CRON') payload.SCHEDULE_CRON_TIME = val;
 
     fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     }).then(res => res.json()).then(() => {
-        alert("Configurações persistidas com sucesso no .env!");
+        alert("Configurações salvas e agendador sincronizado!");
         carregarConfig();
     });
 }
@@ -212,12 +226,18 @@ function atualizarDados() {
             document.getElementById('online').innerText = data.canais_online;
             document.getElementById('offline').innerText = data.canais_offline;
             document.getElementById('log-output').innerText = data.ultimo_log;
-            
             document.getElementById('btn-run').disabled = (data.status === "Executando...");
 
-            const listEl = document.getElementById('files-list');
-            if (data.arquivos_gerados.length > 0) {
-                listEl.innerHTML = data.arquivos_gerados.map(f => `<li>${f}</li>`).join('');
+            const tbody = document.getElementById('links-body');
+            if (data.manifestos.length > 0) {
+                tbody.innerHTML = data.manifestos.map(m => `
+                    <tr>
+                        <td><b>${m.m3u_name}</b></td>
+                        <td>${m.total_canais}</td>
+                        <td><a class="link-copy" href="${m.m3u_url}" target="_blank">${m.m3u_url}</a></td>
+                        <td><a class="link-copy" href="${m.xml_url}" target="_blank">${m.xml_url}</a></td>
+                    </tr>
+                `).join('');
             }
         });
 }
@@ -232,6 +252,15 @@ setInterval(atualizarDados, 2000);
 </body>
 </html>
 """
+
+# Rotas diretas para download/streaming de listas e EPGs
+@app.route("/playlist/<filename>")
+def serve_playlist(filename):
+    return send_from_directory(manager.output_dir, filename, mimetype="application/x-mpegurl")
+
+@app.route("/epg/<filename>")
+def serve_epg(filename):
+    return send_from_directory(manager.output_dir, filename, mimetype="application/xml")
 
 @app.route("/")
 def index():

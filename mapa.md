@@ -1,40 +1,30 @@
-m3u\_processor/
-
+m3u_processor/
 │
-
-├── .env                    # Variáveis de ambiente e parâmetros de persistência
-
-├── requirements.txt        # Dependências do ecossistema Python
-
-├── setup\_env.bat           # Script de instalação e configuração da .venv
-
-├── run\_checker.bat         # Execução direta via terminal (CLI)
-
-├── run\_menu.bat            # Execução do painel web e agendador
-
-├── README.md               # Documentação técnica completa
-
+├── Dockerfile                  # Manifesto de compilação da imagem Docker
+├── docker-compose.yml          # Orquestração de contêineres e montagem de volumes
+├── .env                        # Persistência de configurações e URLs remotas
+├── .env.example                # Modelo limpo para controle de versão
+├── .gitignore                  # Regras de exclusão Git
+├── requirements.txt            # Dependências Python
+├── README.md                   # Manual técnico e operacional
 │
-
-├── input/                  # Arquivos locais (.m3u, .m3u8, .txt)
-
-├── output/                 # Listas saneadas (limite estrito de 400 canais)
-
-├── logs/                   # Histórico de auditoria em JSON
-
+├── setup_env.bat               # Instalação Windows
+├── run_checker.bat             # Execução CLI Windows
+├── run_menu.bat                # Painel Web Windows
 │
-
+├── setup_env.sh                # Instalação Linux/macOS
+├── run_checker.sh              # Execução CLI Linux/macOS
+├── run_menu.sh                 # Painel Web Linux/macOS
+│
+├── input/                      # Listas locais (.m3u, .m3u8, .txt)
+├── output/                     # Listas e XMLs particionados (máx 400 canais)
+├── logs/                       # Histórico de auditoria em JSON
+│
 └── src/
-
-&#x20;   ├── \_\_init\_\_.py
-
-&#x20;   ├── config.py           # Leitura e persistência dinâmica do arquivo .env
-
-&#x20;   ├── parser.py           # Análise sintática (\*parsing\*) de listas locais e remotas
-
-&#x20;   ├── checker.py          # Probing assíncrono (\*stream probing\* / sondagem de fluxo)
-
-&#x20;   ├── manager.py          # Coleta, deduplicação, validação e particionamento
-
-&#x20;   └── app.py              # API Flask e interface gráfica web integrada
-
+    ├── __init__.py
+    ├── config.py               # Gerenciador do .env
+    ├── parser.py               # Extrator de canais e metadados
+    ├── checker.py              # Probing assíncrono com bypass de SSL/HTTPS
+    ├── epg.py                  # Ingestão, descompressão (.gz) e fatiamento XMLTV
+    ├── manager.py              # Deduplicação, expurgo e divisão em lotes
+    └── app.py                  # Servidor Web, links estáticos e agendador

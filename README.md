@@ -1,19 +1,35 @@
-# Sistema Automatizado de Saneamento e Agendamento M3U/M3U8
+# Processador, Auditor e Sincronizador M3U & EPG
 
-## Visão Geral
-Solução técnica projetada para auditoria contínua e particionamento de listas multimídia. Suporta ingestão híbrida (arquivos locais na pasta `input/` e listas remotas via URL), particionando os fluxos operantes em lotes de no máximo 400 canais por arquivo, expurgando streams inoperantes e mantendo auditoria em JSON.
+## Recursos Principais
+1. **Deduplicação Contínua**: Remove canais duplicados cruzando listas locais (`input/`), saídas existentes (`output/`) e links remotos.
+2. **Expurgo de Canais Offline**: Na revalidação, qualquer canal fora do ar é completamente descartado.
+3. **Chunking Rigoroso**: Listas particionadas em no máximo 400 canais por arquivo.
+4. **Bypass SSL/HTTPS**: Configuração avançada de socket TLS que contorna falhas comuns de certificados em servidores de streaming.
+5. **Integração XMLTV (EPG)**: Sincroniza com fontes do `iptv-epg.org`, descompacta arquivos `.gz` e divide a programação em arquivos `.xml` correspondentes a cada lista M3U.
+6. **Servidor Integrado de Links**: Gera URLs estáticas como `http://ip:5000/playlist/playlist_parte_01.m3u` e `http://ip:5000/epg/epg_parte_01.xml`.
 
-## Parâmetros do Arquivo `.env`
-* `MAX_CHANNELS_PER_FILE`: Inteiro determinando a capacidade máxima de cada arquivo de saída (Padrão: 400).
-* `CONCURRENCY_LIMIT`: Quantidade máxima de sockets assíncronos abertos em simultâneo (Padrão: 50).
-* `REQUEST_TIMEOUT`: Limite de espera em segundos por requisição de canal (Padrão: 6).
-* `REMOTE_M3U_URLS`: Lista de URLs separadas por ponto e vírgula (`;`).
-* `SCHEDULE_MODE`: Política de execução do agendador:
-  - `DISABLED`: Sem agendamento, apenas disparo manual.
-  - `INTERVAL`: Repetição periódica em horas (ex: a cada 12 horas).
-  - `CRON`: Execução em horário diário fixo de 24 horas (ex: `03:00` para 3h da manhã).
+## Como Executar
 
-## Modos de Operação
-1. **Configuração Inicial**: Execute `setup_env.bat` uma única vez para criar o ambiente isolado `.venv` e instalar os pacotes.
-2. **Execução Automática / Dashboard**: Execute `run_menu.bat`. A aplicação abre a interface gráfica em `http://127.0.0.1:5000`. O agendador (*APScheduler*) fica residente em segundo plano executando os ciclos programados.
-3. **Execução Pontual**: Execute `run_checker.bat` para rodar uma única auditoria direta via CLI (*Command Line Interface* / Interface de Linha de Comando).
+### Opção 1: Via Docker (Recomendado para servidores)
+```bash
+docker compose up -d --build
+
+
+Acesse no navegador: http://localhost:5000
+Opção 2: Local no Windows
+
+    Execute ```setup_env.bat``` (uma vez).
+
+    Execute ```run_menu.bat``` (abre o painel e agendador).
+
+Opção 3: Local no Linux
+
+```bash
+chmod +x *.sh
+./setup_env.sh
+./run_menu.sh
+```
+
+---
+
+```<FollowUp label="Quer suporte a múltiplos arquivos EPG simultâneos por país ou categoria?" query="Como configurar a mesclagem automática de múltiplos guias EPG de países diferentes do iptv-epg.org em cada partição de 400 canais?"/>```

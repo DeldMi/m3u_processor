@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  m3u-processor:
+    build: .
+    container_name: m3u_processor_service
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./input:/app/input
+      - ./output:/app/output
+      - ./logs:/app/logs
+      - ./.env:/app/.env
+    environment:
+      - PYTHONUNBUFFERED=1

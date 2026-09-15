@@ -15,17 +15,24 @@ class M3UParser:
                 current_metadata = line
             elif not line.startswith("#"):
                 url = line
-                name = "Canal Sem Nome"
+                name = "Canal Desconhecido"
+                tvg_id = ""
+
                 if current_metadata:
-                    match_name = re.search(r",([^,]+)$", current_metadata)
-                    if match_name:
-                        name = match_name.group(1).strip()
+                    # Extrai atributos tvg-id e o nome apos a virgula
+                    id_match = re.search(r'tvg-id="([^"]*)"', current_metadata, re.IGNORECASE)
+                    if id_match:
+                        tvg_id = id_match.group(1).strip()
+                    name_match = re.search(r",([^,]+)$", current_metadata)
+                    if name_match:
+                        name = name_match.group(1).strip()
                 else:
-                    current_metadata = f'#EXTINF:-1 tvg-id="" tvg-name="{name}",{name}'
+                    current_metadata = f'#EXTINF:-1 tvg-id="{name}",{name}'
 
                 channels.append({
                     "metadata": current_metadata,
                     "name": name,
+                    "tvg_id": tvg_id,
                     "url": url,
                     "source": source_identifier
                 })

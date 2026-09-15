@@ -2,6 +2,7 @@
 # Bytecode e Caches do Interpretador Python
 # ==============================================================================
 __pycache__/
+*/__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -56,3 +57,28 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 .DS_Store
+
+
+output/playlist_parte_01.m3u
+output/playlist_parte_02.m3u
+output/playlist_parte_03.m3u
+output/playlist_parte_04.m3u
+output/playlist_parte_05.m3u
+output/playlist_parte_06.m3u
+output/playlist_parte_07.m3u
+output/playlist_parte_08.m3u
+output/playlist_parte_09.m3u
+output/playlist_parte_10.m3u
+output/playlist_parte_11.m3u
+output/playlist_parte_12.m3u
+output/playlist_parte_13.m3u
+output/playlist_parte_14.m3u
+output/playlist_parte_15.m3u
+output/playlist_parte_16.m3u
+output/playlist_parte_17.m3u
+output/playlist_parte_18.m3u
+output/playlist_parte_19.m3u
+output/playlist_parte_20.m3u
+output/playlist_parte_21.m3u
+output/playlist_parte_22.m3u
+output/playlist_parte_23.m3u

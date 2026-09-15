@@ -11,16 +11,17 @@
 ## Como Executar
 
 ### Opção 1: Via Docker (Recomendado para servidores)
-```bash
-docker compose up -d --build
 
+```sh
+docker compose up -d --build
+```
 
 Acesse no navegador: http://localhost:5000
 Opção 2: Local no Windows
 
-    Execute ```setup_env.bat``` (uma vez).
+    Execute ``` setup_env.bat ``` (uma vez).
 
-    Execute ```run_menu.bat``` (abre o painel e agendador).
+    Execute ``` run_menu.bat ``` (abre o painel e agendador).
 
 Opção 3: Local no Linux
 
@@ -32,4 +33,6 @@ chmod +x *.sh
 
 ---
 
-```<FollowUp label="Quer suporte a múltiplos arquivos EPG simultâneos por país ou categoria?" query="Como configurar a mesclagem automática de múltiplos guias EPG de países diferentes do iptv-epg.org em cada partição de 400 canais?"/>```
+```xml
+ <FollowUp label="Quer suporte a múltiplos arquivos EPG simultâneos por país ou categoria?" query="Como configurar a mesclagem automática de múltiplos guias EPG de países diferentes do iptv-epg.org em cada partição de 400 canais?"/>
+ ```

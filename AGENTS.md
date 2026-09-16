@@ -198,6 +198,7 @@ O usuário já pediu e validou as seguintes melhorias:
 - restauração de páginas e fluxos de canais/usuarios/configurações
 - ajuste de listagem e criação de playlist com nome personalizado
 - correção de PATH/npm no modo dev (`ENOENT` resolvido com uso de npm_execpath / npm.cmd)
+- histórico do GitHub reescrito e publicado novamente sem `.env`, banco SQLite, `input/`, `output/`, `logs/` e `src/__pycache__/`
 
 ## Troubleshooting
 
@@ -249,6 +250,25 @@ ou:
 - Componentes de terceiros devem manter suas próprias licenças e créditos.
 - `.gitignore` deve manter fora do Git `.env`, bancos SQLite, logs, `output`, `dist`, `node_modules`, ambientes virtuais e caches Python.
 - Arquivos locais que já tenham sido rastreados devem ser removidos do índice com `git rm --cached`, sem apagar suas cópias de trabalho.
+
+### Histórico Git e arquivos sensíveis
+
+O histórico remoto foi limpo em 2026-09-15 com reescrita da branch `main` e force-push protegido por `--force-with-lease`.
+Os arquivos locais foram preservados, mas não devem ser adicionados ao Git.
+
+Se um segredo voltar a ser publicado, revogue ou troque o segredo primeiro e só depois limpe o histórico. Para conferir arquivos ignorados que ainda estejam rastreados:
+
+```bash
+git ls-files -ci --exclude-standard
+```
+
+Para remover um arquivo local do índice sem apagá-lo do computador:
+
+```bash
+git rm --cached -- caminho/do/arquivo
+```
+
+Depois de uma limpeza histórica, o GitHub pode manter objetos antigos temporariamente em caches internos; dados realmente secretos podem exigir solicitação ao suporte do GitHub.
 
 ## Resumo do que o usuário prioriza
 

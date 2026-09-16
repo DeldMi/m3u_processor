@@ -151,6 +151,26 @@ SCHEDULE_CRON_TIME='03:00'
 
 Depois reinicie o app.
 
+### 11. Arquivos sensíveis apareceram no histórico do Git
+
+O `.gitignore` impede novos arquivos de serem adicionados, mas não remove arquivos
+que já foram versionados. Para conferir arquivos ignorados ainda rastreados:
+
+```bash
+git ls-files -ci --exclude-standard
+```
+
+Para parar de rastrear um arquivo sem apagá-lo localmente:
+
+```bash
+git rm --cached -- .env data/app.db
+```
+
+Se o arquivo já foi publicado em algum commit, é necessário reescrever o histórico
+e fazer push forçado da branch. Antes disso, troque imediatamente senhas, tokens e
+chaves que tenham sido expostos. O histórico antigo pode permanecer temporariamente
+em caches internos do GitHub; para dados secretos, solicite a remoção ao suporte.
+
 ## Log útil
 
 Os relatórios de auditoria ficam em:

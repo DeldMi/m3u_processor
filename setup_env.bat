@@ -18,6 +18,12 @@ npm run build
 if errorlevel 1 exit /b 1
 
 cd /d "%~dp0"
-if not exist ".env" copy /y "exeplo.env" ".env" >nul
+if not exist ".env" (
+    if exist ".env.example" (
+        copy /y ".env.example" ".env" >nul
+    ) else if exist "exeplo.env" (
+        copy /y "exeplo.env" ".env" >nul
+    )
+)
 echo [OK] Ambiente Python e frontend React configurados.
 endlocal

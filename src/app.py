@@ -22,7 +22,9 @@ REACT_DIR = os.path.join(BASE_DIR, "frontend", "react", "dist")
 app.secret_key = ConfigManager(BASE_DIR).get_all().get("SECRET_KEY", "m3u_processor_secret_key_fixed")
 manager = PlaylistManager(BASE_DIR)
 scheduler = BackgroundScheduler(daemon=True)
-scheduler.start()
+PUBLIC_ONLY = os.getenv("PUBLIC_ONLY", "0") == "1"
+if not PUBLIC_ONLY:
+    scheduler.start()
 
 PROCESS_STATE = {
     "status": "Ocioso",
@@ -89,9 +91,9 @@ def get_output_manifests():
             total = 0
         manifests.append({
             "m3u_name": m3u_name,
-            "m3u_url": f"{cfg['BASE_URL']}/playlist/{m3u_name}",
+            "m3u_url": f"{cfg['PUBLIC_BASE_URL']}/playlist/{m3u_name}",
             "xml_name": xml_name,
-            "xml_url": f"{cfg['BASE_URL']}/epg/{xml_name}",
+            "xml_url": f"{cfg['PUBLIC_BASE_URL']}/epg/{xml_name}",
             "total": total,
             "xml_exists": os.path.exists(xml_path)
         })
@@ -156,7 +158,13 @@ def setup_scheduler():
         except Exception:
             pass
 
-setup_scheduler()
+if not PUBLIC_ONLY:
+    setup_scheduler()
+
+@app.before_request
+def restrict_public_server():
+    if PUBLIC_ONLY and not (request.path.startswith("/playlist/") or request.path.startswith("/epg/")):
+        return jsonify({"error": "Apenas links públicos estão disponíveis nesta porta."}), 404
 
 @app.context_processor
 def inject_user():
@@ -440,4 +448,6 @@ def serve_epg(filename):
 
 if __name__ == "__main__":
     cfg = manager.config_mgr.get_all()
-    app.run(host=cfg["WEB_HOST"], port=cfg["WEB_PORT"], debug=False)
+    host_key = "PUBLIC_HOST" if PUBLIC_ONLY else "WEB_HOST"
+    port_key = "PUBLIC_PORT" if PUBLIC_ONLY else "WEB_PORT"
+    app.run(host=cfg[host_key], port=cfg[port_key], debug=False)

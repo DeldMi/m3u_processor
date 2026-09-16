@@ -17,3 +17,18 @@ services:
       - ./logs:/app/logs
       - ./data:/app/data
       - ./.env:/app/.env
+  m3u-public:
+    build: .
+    container_name: m3u_processor_public
+    restart: unless-stopped
+    command: [ "python", "-m", "src.public_server" ]
+    ports:
+      - "8080:8080"
+    environment:
+      PYTHONUNBUFFERED: "1"
+      PUBLIC_ONLY: "1"
+      PUBLIC_HOST: "0.0.0.0"
+      PUBLIC_PORT: "8080"
+    volumes:
+      - ./output:/app/output:ro
+      - ./.env:/app/.env:ro

@@ -25,6 +25,6 @@ COPY --from=frontend-build /app/frontend/react/dist ./frontend/react/dist
 
 RUN chmod +x *.sh 2>/dev/null || true
 
-EXPOSE 5000
+EXPOSE 5000 8080
 
 CMD ["python", "-m", "src.app"]

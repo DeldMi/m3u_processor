@@ -152,7 +152,7 @@ class PlaylistManager:
         cfg = self.config_mgr.get_all()
         profile = profile or {}
         max_limit = max(1, int(profile.get("limit") or cfg["MAX_CHANNELS_PER_FILE"]))
-        base_url = cfg["BASE_URL"]
+        base_url = cfg["PUBLIC_BASE_URL"]
         selected = [channel for channel in channels if self._matches_playlist_profile(channel, profile)]
         sort_field = profile.get("sort", "id")
         reverse = profile.get("direction", "asc").lower() == "desc"
@@ -223,7 +223,7 @@ class PlaylistManager:
         timeout = cfg["REQUEST_TIMEOUT"]
         concurrency = cfg["CONCURRENCY_LIMIT"]
         max_limit = cfg["MAX_CHANNELS_PER_FILE"]
-        base_url = cfg["BASE_URL"]
+        base_url = cfg["PUBLIC_BASE_URL"]
 
         if progress_callback:
             progress_callback("Lendo e deduplicando canais locais e remotos...")

@@ -28,11 +28,14 @@ class ConfigManager:
             "REMOTE_M3U_URLS": config.get("REMOTE_M3U_URLS", ""),
             "EPG_URLS": config.get("EPG_URLS", "https://iptv-epg.org/files/brazil.xml.gz"),
             "BASE_URL": (config.get("BASE_URL", "http://127.0.0.1:5000") or "http://127.0.0.1:5000").rstrip("/"),
+            "PUBLIC_BASE_URL": (config.get("PUBLIC_BASE_URL", "http://127.0.0.1:8080") or "http://127.0.0.1:8080").rstrip("/"),
             "SCHEDULE_MODE": (config.get("SCHEDULE_MODE", "DISABLED") or "DISABLED").upper(),
             "SCHEDULE_INTERVAL_HOURS": self._safe_int(config.get("SCHEDULE_INTERVAL_HOURS", 12), 12),
             "SCHEDULE_CRON_TIME": config.get("SCHEDULE_CRON_TIME", "03:00"),
             "WEB_HOST": os.getenv("WEB_HOST", config.get("WEB_HOST", "0.0.0.0")),
-            "WEB_PORT": self._safe_int(os.getenv("WEB_PORT", config.get("WEB_PORT", 5000)), 5000)
+            "WEB_PORT": self._safe_int(os.getenv("WEB_PORT", config.get("WEB_PORT", 5000)), 5000),
+            "PUBLIC_HOST": os.getenv("PUBLIC_HOST", config.get("PUBLIC_HOST", "0.0.0.0")),
+            "PUBLIC_PORT": self._safe_int(os.getenv("PUBLIC_PORT", config.get("PUBLIC_PORT", 8080)), 8080)
         }
 
     def update_key(self, key: str, value: str):

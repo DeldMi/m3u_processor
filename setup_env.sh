@@ -17,5 +17,11 @@ cd frontend/react
 if [[ -f package-lock.json ]]; then npm ci; else npm install; fi
 npm run build
 cd ../..
-[[ -f .env ]] || cp exeplo.env .env
+if [[ ! -f .env ]]; then
+    if [[ -f .env.example ]]; then
+        cp .env.example .env
+    elif [[ -f exeplo.env ]]; then
+        cp exeplo.env .env
+    fi
+fi
 echo "[OK] Ambiente Python e frontend React configurados."

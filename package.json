@@ -1,0 +1,16 @@
+{
+    "name": "m3u-processor",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Ambiente completo para executar e configurar o M3U Processor",
+    "scripts": {
+        "setup": "node ./scripts/setup.js",
+        "dev": "node ./scripts/run-dev.js",
+        "start": "node ./scripts/run-prod.js",
+        "build": "npm --prefix frontend/react run build",
+        "docker:up": "docker compose up --build -d",
+        "docker:down": "docker compose down",
+        "docker:logs": "docker compose logs -f",
+        "open": "node ./scripts/open.js"
+    }
+}

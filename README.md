@@ -73,7 +73,8 @@ docker compose up -d --build
 ## Como acessar
 
 ```text
-http://127.0.0.1:5000
+Menu: http://127.0.0.1:5000
+Links M3U/EPG: http://127.0.0.1:8080
 ```
 
 ## Configuração principal
@@ -83,8 +84,11 @@ O projeto usa `.env` e inclui o exemplo `exeplo.env`.
 Variáveis principais:
 
 - `BASE_URL`
+- `PUBLIC_BASE_URL`
 - `WEB_HOST`
 - `WEB_PORT`
+- `PUBLIC_HOST`
+- `PUBLIC_PORT`
 - `MAX_CHANNELS_PER_FILE`
 - `CONCURRENCY_LIMIT`
 - `REQUEST_TIMEOUT`
@@ -125,7 +129,8 @@ Para problemas comuns, consulte:
 
 - O build do frontend precisa existir em `frontend/react/dist`
 - a aplicação usa o `SQLite` em `data/app.db`
-- os links exportados usam a URL pública configurada em `BASE_URL`
+- o menu usa `BASE_URL` e `WEB_PORT`
+- os links exportados usam `PUBLIC_BASE_URL` e `PUBLIC_PORT`
 - o `admin` padrão deve ser trocado imediatamente em ambientes reais
 
 ## Exemplos de uso da API

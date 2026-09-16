@@ -34,6 +34,7 @@ pnpm-debug.log*
 # ==============================================================================
 .env
 !.env.example
+!.env.*
 
 # ==============================================================================
 # Diretorios de Dados e Resultados (Ignora o conteudo, preserva a pasta)

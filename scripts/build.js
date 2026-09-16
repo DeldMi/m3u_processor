@@ -83,7 +83,7 @@ function createZip(python) {
         '        for name in files:',
         '            path = os.path.join(root, name)',
         '            z.write(path, os.path.relpath(path, os.path.dirname(src)))',
-    ].join(';');
+    ].join('\n');
     run(python, ['-c', script, PACKAGE_DIR, zipPath], 'Empacotamento ZIP');
     return zipPath;
 }

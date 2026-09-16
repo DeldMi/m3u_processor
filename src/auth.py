@@ -5,6 +5,39 @@ from flask import session, abort, redirect, url_for, request, current_app
 
 ROLE_HIERARCHY = {"admin": 3, "editor": 2, "viewer": 1}
 
+# Compatibilidade das rotas antigas com o novo modelo Recurso × Ação.
+ROUTE_PERMISSIONS = {
+    "api_status": ("dashboard", "view"),
+    "api_internet_health": ("health", "view"),
+    "api_get_logs": ("logs", "view"),
+    "api_get_history": ("logs", "view"),
+    "api_pause_sync": ("sync", "execute"),
+    "api_stop_sync": ("sync", "execute"),
+    "api_get_playlists": ("playlists", "view"),
+    "api_delete_playlists": ("playlists", "delete"),
+    "api_rename_playlist": ("playlists", "edit"),
+    "api_get_channels": ("channels", "view"),
+    "api_channel_options": ("channels", "view"),
+    "api_upload_channel_logo": ("channels", "edit"),
+    "api_users": ("users", "view"),
+    "api_update_user": ("users", "edit"),
+    "api_update_profile": ("users", "edit"),
+    "api_admin_restart": ("system", "admin"),
+    "api_admin_shutdown": ("system", "admin"),
+    "api_update_channel": ("channels", "edit"),
+    "api_generate_custom_playlist": ("playlists", "create"),
+    "api_toggle_channel_status": ("channels", "edit"),
+    "api_toggle_autoremove": ("channels", "edit"),
+    "api_trigger_sync": ("sync", "execute"),
+    "api_save_config": ("settings", "admin"),
+    "api_get_config": ("settings", "view"),
+    "view_users": ("users", "view"),
+    "view_settings": ("settings", "view"),
+    "view_channels": ("channels", "view"),
+    "view_playlists": ("playlists", "view"),
+    "view_dashboard": ("dashboard", "view"),
+}
+
 
 def login_user(user_row: dict):
     session.clear()
@@ -57,7 +90,7 @@ def current_user(db=None):
 
 
 def require_role(min_role: str):
-    """Compatibilidade legada: exige o papel mínimo."""
+    """Compatibilidade legada, agora complementada por autorização granular."""
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
@@ -76,6 +109,14 @@ def require_role(min_role: str):
                 return redirect(url_for("auth_login"))
             if ROLE_HIERARCHY.get(user.get("role"), 0) < ROLE_HIERARCHY.get(min_role, 0):
                 abort(403)
+            permission = ROUTE_PERMISSIONS.get(f.__name__)
+            if permission:
+                from src.domains.authz.service import has_permission
+                from src.app import manager
+                if not has_permission(manager.db, int(user["id"]), user["role"], *permission):
+                    if request.path.startswith("/api/"):
+                        return {"error": "Permissão insuficiente", "resource": permission[0], "action": permission[1]}, 403
+                    abort(403)
             return f(*args, **kwargs)
         return decorated_function
     return decorator

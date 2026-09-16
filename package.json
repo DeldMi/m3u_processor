@@ -14,7 +14,7 @@
         "start": "node ./scripts/run-prod.js",
         "build": "node ./scripts/build.js",
         "build:frontend": "npm --prefix frontend/react run build",
-        "build:cloudflare": "bun --cwd frontend/react run build",
+        "build:cloudflare": "bun run --cwd frontend/react build",
         "deploy:cloudflare": "npm run build:cloudflare && npx wrangler pages deploy frontend/react/dist --project-name m3u-processor",
         "cloudflare:dev": "npx wrangler pages dev frontend/react/dist",
         "docker:up": "docker compose up --build -d",

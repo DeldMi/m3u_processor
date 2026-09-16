@@ -12,6 +12,8 @@
         "build": "node ./scripts/build.js",
         "build:frontend": "npm --prefix frontend/react run build",
         "build:cloudflare": "node ./scripts/build-cloudflare.js",
+        "deploy:cloudflare": "npm run build:cloudflare && npx wrangler pages deploy frontend/react/dist --project-name m3u-processor",
+        "cloudflare:dev": "npx wrangler pages dev frontend/react/dist",
         "docker:up": "docker compose up --build -d",
         "docker:down": "docker compose down",
         "docker:logs": "docker compose logs -f",

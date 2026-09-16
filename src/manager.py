@@ -59,6 +59,17 @@ class PlaylistManager:
                 invalid.append({**channel, "latency_ms": latency, "http_status": status_code})
         return valid, invalid
 
+    async def refresh_channel_health(self) -> Dict[str, int]:
+        channels = self.db.list_channels()
+        if not channels:
+            return {"total": 0, "online": 0, "offline": 0}
+        valid, invalid = await self.validate_all_channels(channels)
+        for channel in valid:
+            self.db.update_channel_status(channel["url"], "online", channel.get("latency_ms", 0), channel.get("http_status", 0))
+        for channel in invalid:
+            self.db.update_channel_status(channel["url"], "offline", channel.get("latency_ms", 0), channel.get("http_status", 0))
+        return {"total": len(channels), "online": len(valid), "offline": len(invalid)}
+
     def save_partitioned_playlists(self, channels: List[Dict[str, Any]]) -> List[str]:
         if not channels:
             return []

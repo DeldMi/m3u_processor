@@ -171,6 +171,13 @@ e fazer push forçado da branch. Antes disso, troque imediatamente senhas, token
 chaves que tenham sido expostos. O histórico antigo pode permanecer temporariamente
 em caches internos do GitHub; para dados secretos, solicite a remoção ao suporte.
 
+### 12. Erro `database or disk is full`
+
+Esse erro significa que a unidade do projeto não consegue gravar no SQLite ou criar
+arquivos temporários. Verifique o espaço livre, remova arquivos locais grandes ou
+antigos e reinicie o backend. O sistema bloqueia novas sincronizações quando há
+menos de 512 MB livres e evita iniciar várias sincronizações ao mesmo tempo.
+
 ## Log útil
 
 Os relatórios de auditoria ficam em:

@@ -59,6 +59,7 @@ data/*
 *.log
 *.tmp
 *.bak
+.tmp*
 
 # ==============================================================================
 # Metadados de Ambientes de Desenvolvimento (IDEs)

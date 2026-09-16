@@ -224,6 +224,8 @@ class Database:
 
     def update_user(self, user_id: int, values: Dict[str, Any]) -> bool:
         changes = {}
+        if values.get("username"):
+            changes["username"] = str(values["username"]).strip()
         if values.get("role") in {"admin", "editor", "viewer"}:
             changes["role"] = values["role"]
         if values.get("password"):
@@ -235,6 +237,11 @@ class Database:
             cursor = conn.execute(f"UPDATE users SET {assignments} WHERE id = ?", [*changes.values(), user_id])
             conn.commit()
             return cursor.rowcount > 0
+
+    def get_user(self, user_id: int) -> Optional[Dict[str, Any]]:
+        with self.get_connection() as conn:
+            row = conn.execute("SELECT id, username, role, created_at FROM users WHERE id = ?", (user_id,)).fetchone()
+            return dict(row) if row else None
 
     def add_process_event(self, message: str, level: str = "info", run_id: Optional[int] = None):
         with self.get_connection() as conn:

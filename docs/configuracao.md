@@ -19,12 +19,47 @@ REMOTE_M3U_URLS=''
 SCHEDULE_MODE='DISABLED'
 SCHEDULE_INTERVAL_HOURS=12
 SCHEDULE_CRON_TIME=03:00
+HEALTH_CHECK_INTERVAL_SECONDS=60
 WEB_HOST=127.0.0.1
 WEB_PORT=5000
 BASE_URL=http://127.0.0.1:5000
 API_TOKEN=
 SECRET_KEY=
 ```
+
+## Saúde automática dos canais
+
+`HEALTH_CHECK_INTERVAL_SECONDS` define o intervalo da verificação em segundo
+plano. A rotina atualiza status, latência, código HTTP e data da última análise
+dos canais já cadastrados, sem regenerar playlists. O painel atualiza os números
+automaticamente e permite filtrar online e offline.
+
+## Configurações opcionais
+
+As opções abaixo estão disponíveis na tela de Configurações:
+
+### General
+
+`AUTO_UPDATE_XTEVE`, `NUMBER_OF_TUNERS`, `EPG_SOURCE` e `API_INTERFACE_ENABLED`.
+
+### Files
+
+`FILE_UPDATE_SCHEDULE`, `UPDATE_FILES_ON_STARTUP`, `TEMP_FILES_LOCATION`,
+`IMAGE_CACHING` e `REPLACE_MISSING_PROGRAM_IMAGES`.
+
+### Streaming
+
+`STREAM_BUFFER_ENABLED`, `UDPPROXY_ADDRESS`, `BUFFER_SIZE_MB`,
+`CLIENT_CONNECTION_TIMEOUT_MS`, `FFMPEG_BINARY_PATH`, `FFMPEG_OPTIONS`,
+`VLC_BINARY_PATH` e `VLC_OPTIONS`.
+
+### Backup
+
+`BACKUP_LOCATION` e `BACKUPS_TO_KEEP`.
+
+### Authentication
+
+`WEB_AUTHENTICATION` mantém o painel protegido por credenciais.
 
 ## Explicação das variáveis
 

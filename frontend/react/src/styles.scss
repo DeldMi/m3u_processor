@@ -228,6 +228,58 @@ textarea {
     letter-spacing: 1px;
 }
 
+.account-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.account-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 0;
+    background: transparent;
+    color: $ink;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.admin-menu-wrap {
+    position: relative;
+}
+
+.admin-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 8;
+    display: grid;
+    min-width: 205px;
+    padding: 6px;
+    border: 1px solid $line;
+    border-radius: 7px;
+    background: #10232b;
+    box-shadow: 0 16px 35px rgba(0, 0, 0, .3);
+}
+
+.admin-menu button {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 10px;
+    border: 0;
+    background: transparent;
+    color: $ink;
+    text-align: left;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.admin-menu button:hover {
+    background: #17343d;
+}
+
 .page-heading {
     display: flex;
     align-items: end;

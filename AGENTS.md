@@ -122,6 +122,7 @@ Variáveis importantes:
 - SCHEDULE_MODE
 - SCHEDULE_INTERVAL_HOURS
 - SCHEDULE_CRON_TIME
+- HEALTH_CHECK_INTERVAL_SECONDS
 - API_TOKEN
 - SECRET_KEY
 
@@ -199,6 +200,8 @@ O usuário já pediu e validou as seguintes melhorias:
 - ajuste de listagem e criação de playlist com nome personalizado
 - correção de PATH/npm no modo dev (`ENOENT` resolvido com uso de npm_execpath / npm.cmd)
 - histórico do GitHub reescrito e publicado novamente sem `.env`, banco SQLite, `input/`, `output/`, `logs/` e `src/__pycache__/`
+- proteção adicionada para impedir sincronizações concorrentes e tratar falta de espaço em disco sem derrubar a thread do pipeline
+- verificação automática periódica da saúde dos canais existentes, atualizando online/offline, latência, HTTP e `last_checked` sem regenerar playlists
 
 ## Troubleshooting
 
@@ -235,6 +238,7 @@ ou:
 - docs/troubleshooting.md — problemas comuns
 - docs/acesso-e-recuperacao.md — senhas e recuperação de acesso
 - docs/direitos-e-doacoes.md — autoria, licença, créditos e doações
+- docs/configuracao.md — configuração do sistema e saúde automática dos canais
 
 ## Regras para agentes e chats
 
@@ -269,6 +273,10 @@ git rm --cached -- caminho/do/arquivo
 ```
 
 Depois de uma limpeza histórica, o GitHub pode manter objetos antigos temporariamente em caches internos; dados realmente secretos podem exigir solicitação ao suporte do GitHub.
+
+### Erro `database or disk is full` ou `No space left on device`
+
+Causa: a unidade que contém o projeto está sem espaço para o SQLite, arquivos temporários ou logs. Libere espaço no disco e reinicie o backend antes de executar nova sincronização. O endpoint de sincronização bloqueia novas execuções quando há menos de 512 MB livres.
 
 ## Resumo do que o usuário prioriza
 

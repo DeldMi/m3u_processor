@@ -4,6 +4,9 @@ import asyncio
 import glob
 import time
 import re
+import shutil
+import sqlite3
+import sys
 from collections import deque
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request, redirect, url_for, send_from_directory, send_file
@@ -38,6 +41,8 @@ PROCESS_LOGS = deque(maxlen=250)
 PAUSE_REQUESTED = threading.Event()
 STOP_REQUESTED = threading.Event()
 ACTIVE_RUN_ID = None
+PIPELINE_LOCK = threading.Lock()
+MIN_FREE_SPACE_BYTES = 512 * 1024 * 1024
 
 class PipelineInterrupted(Exception):
     pass
@@ -75,7 +80,13 @@ def add_process_log(message: str, level: str = "info"):
         "level": level,
         "message": message
     })
-    manager.db.add_process_event(message, level, ACTIVE_RUN_ID)
+    try:
+        manager.db.add_process_event(message, level, ACTIVE_RUN_ID)
+    except (OSError, sqlite3.OperationalError):
+        pass
+
+def has_sufficient_disk_space() -> bool:
+    return shutil.disk_usage(BASE_DIR).free >= MIN_FREE_SPACE_BYTES
 
 def get_output_manifests():
     cfg = manager.config_mgr.get_all()
@@ -106,18 +117,22 @@ def update_log_state(message: str):
 
 def execute_pipeline():
     global PROCESS_STATE, ACTIVE_RUN_ID
-    if PROCESS_STATE["status"] == "Executando...":
+    if PROCESS_STATE["status"] == "Executando..." or not PIPELINE_LOCK.acquire(blocking=False):
         return
 
-    STOP_REQUESTED.clear()
-    PAUSE_REQUESTED.clear()
-    ACTIVE_RUN_ID = manager.db.start_process_run()
-    PROCESS_STATE["status"] = "Executando..."
-    update_log_state("Iniciando auditoria completa...")
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    loop = None
     try:
+        if not has_sufficient_disk_space():
+            PROCESS_STATE["status"] = "Erro"
+            PROCESS_STATE["ultimo_log"] = "Espaço em disco insuficiente para executar a sincronização."
+            return
+        STOP_REQUESTED.clear()
+        PAUSE_REQUESTED.clear()
+        ACTIVE_RUN_ID = manager.db.start_process_run()
+        PROCESS_STATE["status"] = "Executando..."
+        update_log_state("Iniciando auditoria completa...")
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         res = loop.run_until_complete(manager.sync_and_audit(progress_callback=update_log_state, control_callback=pipeline_checkpoint))
         PROCESS_STATE["total_canais"] = res.get("total", 0)
         PROCESS_STATE["canais_online"] = res.get("online", 0)
@@ -132,6 +147,17 @@ def execute_pipeline():
         PROCESS_STATE["ultimo_log"] = str(exc)
         add_process_log(PROCESS_STATE["ultimo_log"], "warning")
         manager.db.finish_process_run(ACTIVE_RUN_ID, "Interrompido", {}, PROCESS_STATE["ultimo_log"])
+    except (OSError, sqlite3.OperationalError) as e:
+        PROCESS_STATE["status"] = "Erro"
+        PROCESS_STATE["ultimo_log"] = "Falha de armazenamento durante a execução. Libere espaço em disco e tente novamente."
+        if "database or disk is full" not in str(e).lower() and "no space left" not in str(e).lower():
+            PROCESS_STATE["ultimo_log"] = f"Falha de armazenamento: {str(e)}"
+        add_process_log(PROCESS_STATE["ultimo_log"], "error")
+        if ACTIVE_RUN_ID is not None:
+            try:
+                manager.db.finish_process_run(ACTIVE_RUN_ID, "Erro", {}, PROCESS_STATE["ultimo_log"])
+            except (OSError, sqlite3.OperationalError):
+                pass
     except Exception as e:
         PROCESS_STATE["status"] = "Erro"
         PROCESS_STATE["ultimo_log"] = f"Falha na execucao: {str(e)}"
@@ -141,12 +167,27 @@ def execute_pipeline():
         PAUSE_REQUESTED.clear()
         STOP_REQUESTED.clear()
         ACTIVE_RUN_ID = None
-        loop.close()
+        if loop is not None:
+            loop.close()
+        PIPELINE_LOCK.release()
+
+def execute_health_check():
+    if PIPELINE_LOCK.locked() or not has_sufficient_disk_space():
+        return
+    try:
+        result = asyncio.run(manager.refresh_channel_health())
+        PROCESS_STATE["total_canais"] = result["total"]
+        PROCESS_STATE["canais_online"] = result["online"]
+        PROCESS_STATE["canais_offline"] = result["offline"]
+        PROCESS_STATE["ultimo_log"] = f"Saúde atualizada: {result['online']} online, {result['offline']} offline."
+    except (OSError, sqlite3.OperationalError):
+        return
 
 def setup_scheduler():
     scheduler.remove_all_jobs()
     cfg = manager.config_mgr.get_all()
     mode = cfg.get("SCHEDULE_MODE", "DISABLED")
+    scheduler.add_job(execute_health_check, "interval", seconds=max(15, cfg.get("HEALTH_CHECK_INTERVAL_SECONDS", 60)), id="m3u_health_job", replace_existing=True, max_instances=1, coalesce=True, next_run_time=datetime.now())
 
     if mode == "INTERVAL":
         hours = max(1, cfg.get("SCHEDULE_INTERVAL_HOURS", 12))
@@ -256,6 +297,12 @@ def view_settings():
 @app.route("/api/status")
 def get_status():
     data = dict(PROCESS_STATE)
+    channels = manager.db.list_channels()
+    if channels:
+        data["total_canais"] = len(channels)
+        data["canais_online"] = sum(channel.get("status") == "online" for channel in channels)
+        data["canais_offline"] = sum(channel.get("status") == "offline" for channel in channels)
+        data["canais_desconhecidos"] = sum(channel.get("status") == "desconhecido" for channel in channels)
     data["logs"] = list(PROCESS_LOGS)
     data["log_count"] = len(PROCESS_LOGS)
     data["historico"] = manager.db.list_process_runs(limit=20)
@@ -379,6 +426,39 @@ def api_update_user(user_id):
         return jsonify({"error": "Usuário não encontrado ou sem alterações"}), 404
     return jsonify({"status": "atualizado"})
 
+@app.route("/api/profile", methods=["PATCH"])
+def api_update_profile():
+    user = current_user()
+    if not user:
+        return jsonify({"error": "Não autenticado"}), 401
+    values = request.json or {}
+    if values.get("username") and values["username"] != user["username"]:
+        with manager.db.get_connection() as conn:
+            try:
+                conn.execute("UPDATE users SET username = ? WHERE id = ?", (str(values["username"]).strip(), user["id"]))
+                conn.commit()
+            except sqlite3.IntegrityError:
+                return jsonify({"error": "Nome de usuário já existe"}), 409
+    if values.get("password") or values.get("role"):
+        if user["role"] != "admin" and values.get("role"):
+            return jsonify({"error": "Somente admin pode alterar papel"}), 403
+        manager.db.update_user(user["id"], values)
+    return jsonify({"status": "atualizado", "user": manager.db.get_user(user["id"])})
+
+@app.route("/api/admin/restart", methods=["POST"])
+@require_role("admin")
+def api_admin_restart():
+    def restart():
+        os.execv(sys.executable, [sys.executable, "-m", "src.app"])
+    threading.Timer(0.25, restart).start()
+    return jsonify({"status": "reiniciando"})
+
+@app.route("/api/admin/shutdown", methods=["POST"])
+@require_role("admin")
+def api_admin_shutdown():
+    threading.Timer(0.25, os._exit, args=(0,)).start()
+    return jsonify({"status": "desligando"})
+
 @app.route("/api/v1/channels/<int:ch_id>", methods=["PATCH"])
 @require_role("editor")
 def api_update_channel(ch_id):
@@ -417,7 +497,9 @@ def api_toggle_autoremove(ch_id):
 @app.route("/api/v1/sync", methods=["POST"])
 @require_role("editor")
 def api_trigger_sync():
-    if PROCESS_STATE["status"] != "Executando...":
+    if not has_sufficient_disk_space():
+        return jsonify({"status": "erro", "error": "Espaço em disco insuficiente. Libere espaço e tente novamente."}), 507
+    if PROCESS_STATE["status"] != "Executando..." and not PIPELINE_LOCK.locked():
         thread = threading.Thread(target=execute_pipeline, daemon=True)
         thread.start()
         return jsonify({"status": "iniciado"})

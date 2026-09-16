@@ -6,34 +6,20 @@ from flask import session, abort, redirect, url_for, request, current_app
 ROLE_HIERARCHY = {"admin": 3, "editor": 2, "viewer": 1}
 
 ROUTE_PERMISSIONS = {
-    "api_status": ("dashboard", "view"),
-    "api_internet_health": ("health", "view"),
-    "api_get_logs": ("logs", "view"),
-    "api_get_history": ("logs", "view"),
-    "api_pause_sync": ("sync", "execute"),
-    "api_stop_sync": ("sync", "execute"),
-    "api_get_playlists": ("playlists", "view"),
-    "api_delete_playlists": ("playlists", "delete"),
-    "api_rename_playlist": ("playlists", "edit"),
-    "api_get_channels": ("channels", "view"),
-    "api_channel_options": ("channels", "view"),
-    "api_upload_channel_logo": ("channels", "edit"),
-    "api_users": ("users", "view"),
-    "api_update_user": ("users", "edit"),
-    "api_update_profile": ("users", "edit"),
-    "api_admin_restart": ("system", "admin"),
-    "api_admin_shutdown": ("system", "admin"),
-    "api_update_channel": ("channels", "edit"),
-    "api_generate_custom_playlist": ("playlists", "create"),
-    "api_toggle_channel_status": ("channels", "edit"),
-    "api_toggle_autoremove": ("channels", "edit"),
-    "api_trigger_sync": ("sync", "execute"),
-    "api_save_config": ("settings", "admin"),
-    "api_get_config": ("settings", "view"),
-    "view_users": ("users", "view"),
-    "view_settings": ("settings", "view"),
-    "view_channels": ("channels", "view"),
-    "view_playlists": ("playlists", "view"),
+    "api_status": ("dashboard", "view"), "api_internet_health": ("health", "view"),
+    "api_get_logs": ("logs", "view"), "api_get_history": ("logs", "view"),
+    "api_pause_sync": ("sync", "execute"), "api_stop_sync": ("sync", "execute"),
+    "api_get_playlists": ("playlists", "view"), "api_delete_playlists": ("playlists", "delete"),
+    "api_rename_playlist": ("playlists", "edit"), "api_get_channels": ("channels", "view"),
+    "api_channel_options": ("channels", "view"), "api_upload_channel_logo": ("channels", "edit"),
+    "api_users": ("users", "view"), "api_update_user": ("users", "edit"),
+    "api_update_profile": ("users", "edit"), "api_admin_restart": ("system", "admin"),
+    "api_admin_shutdown": ("system", "admin"), "api_update_channel": ("channels", "edit"),
+    "api_generate_custom_playlist": ("playlists", "create"), "api_toggle_channel_status": ("channels", "edit"),
+    "api_toggle_autoremove": ("channels", "edit"), "api_trigger_sync": ("sync", "execute"),
+    "api_save_config": ("settings", "admin"), "api_get_config": ("settings", "view"),
+    "view_users": ("users", "view"), "view_settings": ("settings", "view"),
+    "view_channels": ("channels", "view"), "view_playlists": ("playlists", "view"),
     "view_dashboard": ("dashboard", "view"),
 }
 
@@ -86,16 +72,11 @@ def current_user(db=None):
         session["role"] = user["role"]
         return user
     except Exception:
-        # Nunca transformar falha de banco/esquema em sessão autorizada.
         logout_user()
         return None
 
 
 def _api_token_is_valid() -> bool:
-    """Mantém o token legado, mas apenas para rotas explicitamente administrativas.
-
-    O token não recebe automaticamente todas as permissões RBAC de uma sessão.
-    """
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         return False
@@ -104,44 +85,43 @@ def _api_token_is_valid() -> bool:
         return False
     from src.config import ConfigManager
     root_dir = os.path.abspath(os.path.join(current_app.root_path, ".."))
-    cfg = ConfigManager(root_dir).get_all()
-    configured = str(cfg.get("API_TOKEN") or "").strip()
+    configured = str(ConfigManager(root_dir).get_all().get("API_TOKEN") or "").strip()
     return bool(configured and token == configured)
 
 
+def _permission_denied(permission):
+    if request.path.startswith("/api/"):
+        return {"error": "Permissão insuficiente", "resource": permission[0], "action": permission[1]}, 403
+    abort(403)
+
+
 def require_role(min_role: str):
-    """Compatibilidade legada, agora complementada por autorização granular."""
+    """Compatibilidade legada: rotas mapeadas usam a autorização granular."""
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             user = current_user()
+            permission = ROUTE_PERMISSIONS.get(f.__name__)
             if not user:
-                # Token legado continua disponível para integrações internas,
-                # mas não substitui a autorização granular de usuários.
-                if _api_token_is_valid() and request.path.startswith("/api/"):
-                    permission = ROUTE_PERMISSIONS.get(f.__name__)
-                    if permission and permission[0] in {"dashboard", "health", "logs", "playlists", "channels", "sync", "settings", "public_files"}:
-                        return f(*args, **kwargs)
+                if _api_token_is_valid() and request.path.startswith("/api/") and permission and permission[0] in {"dashboard", "health", "logs", "playlists", "channels", "sync", "settings", "public_files"}:
+                    return f(*args, **kwargs)
                 if request.path.startswith("/api/"):
                     return {"error": "Não autenticado"}, 401
                 return redirect(url_for("auth_login"))
-            if ROLE_HIERARCHY.get(user.get("role"), 0) < ROLE_HIERARCHY.get(min_role, 0):
-                abort(403)
-            permission = ROUTE_PERMISSIONS.get(f.__name__)
+
             if permission:
                 from src.domains.authz.service import has_permission
                 from src.app import manager
                 if not has_permission(manager.db, int(user["id"]), user["role"], *permission):
-                    if request.path.startswith("/api/"):
-                        return {"error": "Permissão insuficiente", "resource": permission[0], "action": permission[1]}, 403
-                    abort(403)
+                    return _permission_denied(permission)
+            elif ROLE_HIERARCHY.get(user.get("role"), 0) < ROLE_HIERARCHY.get(min_role, 0):
+                abort(403)
             return f(*args, **kwargs)
         return decorated_function
     return decorator
 
 
 def require_permission(resource: str, action: str):
-    """Autoriza por recurso/ação; falha fechado para usuários autenticados."""
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
@@ -153,9 +133,7 @@ def require_permission(resource: str, action: str):
             from src.domains.authz.service import has_permission
             from src.app import manager
             if not has_permission(manager.db, int(user["id"]), user["role"], resource, action):
-                if request.path.startswith("/api/"):
-                    return {"error": "Permissão insuficiente", "resource": resource, "action": action}, 403
-                abort(403)
+                return _permission_denied((resource, action))
             return f(*args, **kwargs)
         return decorated_function
     return decorator

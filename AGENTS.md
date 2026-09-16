@@ -74,7 +74,7 @@ Novas funcionalidades devem entrar no domínio correspondente; não aumentar `ap
 
 ## Instalação oficial
 
-Na raiz:
+Na raiz do projeto:
 
 ```text
 npm run setup
@@ -103,15 +103,19 @@ docker compose down
 O setup é idempotente, cross-platform e não pode depender de caminhos absolutos da máquina.
 
 1. verifica Node.js;
-2. localiza Python 3 (`py`/`python` no Windows; `python3`/`python` em Unix);
+2. localiza Python 3 (`py -3`/`python` no Windows; `python3`/`python` em Unix);
 3. cria `.venv` na raiz quando necessário;
-4. instala `requirements.txt` no `.venv`;
-5. cria `.env` a partir de `.env.example` quando necessário;
-6. usa `npm ci` se `frontend/react/package-lock.json` existir, caso contrário usa `npm install`;
-7. executa o build React;
-8. confirma `frontend/react/dist/index.html`.
+4. verifica se o `.venv` realmente consegue iniciar o Python;
+5. recria automaticamente um `.venv` inválido ou criado em outra pasta;
+6. instala `requirements.txt` no `.venv`;
+7. cria `.env` a partir de `.env.example` quando necessário;
+8. usa `npm ci` se `frontend/react/package-lock.json` existir, caso contrário usa `npm install`;
+9. executa o build React;
+10. confirma `frontend/react/dist/index.html`.
 
-O `setup.js` **não chama `main()` inexistente** e **não chama `installFrontendDeps()` recursivamente**.
+**Não confiar somente na existência de `.venv/Scripts/python.exe`.** Um virtualenv pode ter sido criado em outro diretório e conservar referência ao Python antigo. O setup deve validar o executável antes de usá-lo.
+
+O `setup.js` não pode chamar `main()` inexistente nem `installFrontendDeps()` recursivamente.
 
 ### Desenvolvimento
 
@@ -122,7 +126,9 @@ O `setup.js` **não chama `main()` inexistente** e **não chama `installFrontend
 
 O caminho é calculado relativo à raiz do projeto. Nunca usar caminhos como `C:\\www\\...` ou `/usr/bin/...`.
 
-São iniciados backend Flask, servidor público e Vite. Se o ambiente estiver incompleto, o setup é executado antes do início.
+Antes de iniciar os processos, `run-dev.js` deve validar o `.venv` e o build. Se o ambiente estiver incompleto ou o virtualenv estiver inválido, executa o setup.
+
+São iniciados backend Flask, servidor público e Vite. No Windows, `npm.cmd` deve ser iniciado de maneira compatível com `spawn`, evitando `EINVAL`.
 
 ### Produção
 
@@ -130,9 +136,14 @@ São iniciados backend Flask, servidor público e Vite. Se o ambiente estiver in
 
 ## Validação
 
-- `npm run test` — testes Python.
-- `npm run typecheck` — build TypeScript/Vite.
+- `npm run test` — executa os testes Python usando o `.venv` do projeto.
+- `npm run typecheck` — executa o build TypeScript/Vite através de script cross-platform.
+- `npm run build` — build TypeScript/Vite.
 - `npm run verify` — sintaxe Python, testes, build React e arquivos obrigatórios.
+
+Os scripts de validação não devem executar os testes com o Python global quando `.venv` estiver disponível, pois isso causa falsos erros como `ModuleNotFoundError: dotenv`.
+
+No Windows, chamadas a `npm.cmd` devem usar `shell: true` quando iniciadas diretamente por `spawn`/`spawnSync`, evitando `spawnSync npm.cmd EINVAL`.
 
 ## Ambiente
 
@@ -189,13 +200,27 @@ git rm --cached -- caminho/do/arquivo
 
 ## Problemas corrigidos nesta versão
 
-- `npm ci` sem lockfile: frontend possui lockfile e o setup tem fallback para `npm install`.
+- `npm ci` sem lockfile: o setup usa `npm ci` quando há lockfile e `npm install` quando não há.
 - `main is not defined`: corrigido em `scripts/setup.js`.
 - Recursão de `installFrontendDeps()`: removida.
-- `/usr/bin\\python.exe`: removido; scripts usam `.venv` relativo à raiz.
-- `.venv` em outro diretório: não é mais aceito pelo setup/runtime.
-- `spawn npm ENOENT`: npm usa `npm_execpath` quando disponível e `npm.cmd` no Windows.
+- `/usr/bin\\python.exe`: não é mais usado pelo projeto.
+- `.venv` em outro diretório: o setup detecta virtualenv inválido e recria o ambiente local.
+- `ModuleNotFoundError: dotenv` nos testes: `verify` e `npm test` usam o Python do `.venv`.
+- `spawnSync npm.cmd EINVAL`: scripts de npm no Windows usam execução compatível com `.cmd`.
+- `run-dev.js`: valida/repara o ambiente antes de iniciar e não aceita um `.venv` quebrado apenas porque o arquivo existe.
 - `run-prod.js`: valida ambiente e encerra processos irmãos de forma controlada.
+
+## Recuperação de ambiente Windows
+
+Se um projeto tiver sido movido de uma pasta para outra, por exemplo de `C:\\www\\m3u_processor` para outra unidade, o `.venv` antigo pode continuar apontando internamente para o Python da instalação anterior. **Não copiar `.venv` entre máquinas ou diretórios.**
+
+A ação oficial é:
+
+```text
+npm run setup
+```
+
+O próprio setup deve detectar e recriar o ambiente virtual. Não é necessário alterar scripts para apontar para `/usr/bin/python.exe` ou para um caminho absoluto do computador.
 
 ## Prioridades
 

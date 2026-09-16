@@ -19,10 +19,19 @@ const pythonCandidates = isWindows ? [venvPython, 'py', 'python'] : [venvPython,
 function run(command, args, label, options = {}) {
     console.log(`\n==> ${label}`);
 
-    // No Windows, npm é um script .cmd. Executá-lo diretamente com shell:false
-    // evita problemas de quoting/escaping do `cmd /c` e mantém a execução segura.
-    const executable = isWindows && command === 'npm' ? 'npm.cmd' : command;
-    const result = spawnSync(executable, args, {
+    let executable = command;
+    let spawnArgs = args;
+
+    // Windows registra npm como npm.cmd. O Node não consegue executar um .cmd
+    // com shell:false de forma portável (EINVAL em algumas versões). Para
+    // evitar quoting manual incorreto, usamos o próprio cmd.exe apenas para
+    // o script npm, mantendo shell:false no spawn do Node.
+    if (isWindows && command === 'npm') {
+        executable = process.env.ComSpec || 'cmd.exe';
+        spawnArgs = ['/d', '/s', '/c', `npm.cmd ${args.join(' ')}`];
+    }
+
+    const result = spawnSync(executable, spawnArgs, {
         cwd: ROOT,
         stdio: 'inherit',
         shell: false,

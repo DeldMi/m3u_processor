@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Boxes, ChevronLeft, ChevronRight, ListVideo, Play, RefreshCw, Save, SlidersHorizontal, Upload, Wifi, X } from "lucide-react";
-import { api } from "../../services/api";
+import { api, send } from "../../services/api";
 import type { Channel, ChannelColumn, ChannelOptions, Manifest, User } from "../../types";
 import { Header, PanelTitle, Empty, Modal, canEdit } from "../../components/Common";
 

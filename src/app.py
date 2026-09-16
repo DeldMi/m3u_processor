@@ -21,7 +21,7 @@ from src.domains.health.internet import check_internet_health as _check_internet
 from src.domains.playlists.service import get_output_manifests as _get_output_manifests
 from src.domains.sync.service import execute_health_check as _execute_health_check
 from src.domains.sync.service import execute_pipeline as _execute_pipeline
-from src.domains.authz.service import create_user as authz_create_user, update_user as authz_update_user, list_public_users, public_user
+from src.domains.authz.service import create_user as authz_create_user, update_user as authz_update_user, list_public_users, public_user, has_permission
 from src.manager import PlaylistManager
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -194,25 +194,39 @@ def view_settings():
 @app.route("/api/status")
 @require_role("viewer")
 def get_status():
-    from src.domains.authz.service import has_permission
     user = current_user(manager.db)
-    data = dict(PROCESS_STATE)
-    channels = manager.db.list_channels()
-    if channels:
-        data["total_canais"] = len(channels)
-        data["canais_online"] = sum(channel.get("status") == "online" for channel in channels)
-        data["canais_offline"] = sum(channel.get("status") == "offline" for channel in channels)
-        data["canais_desconhecidos"] = sum(channel.get("status") == "desconhecido" for channel in channels)
+    data = {"status": PROCESS_STATE["status"], "ultimo_log": PROCESS_STATE["ultimo_log"]}
+
+    if user and has_permission(manager.db, int(user["id"]), user["role"], "dashboard", "view"):
+        data.update({
+            "total_canais": PROCESS_STATE["total_canais"],
+            "canais_online": PROCESS_STATE["canais_online"],
+            "canais_offline": PROCESS_STATE["canais_offline"],
+        })
+
+    if user and has_permission(manager.db, int(user["id"]), user["role"], "channels", "view"):
+        channels = manager.db.list_channels()
+        if channels:
+            data["total_canais"] = len(channels)
+            data["canais_online"] = sum(channel.get("status") == "online" for channel in channels)
+            data["canais_offline"] = sum(channel.get("status") == "offline" for channel in channels)
+            data["canais_desconhecidos"] = sum(channel.get("status") == "desconhecido" for channel in channels)
+
+    if user and has_permission(manager.db, int(user["id"]), user["role"], "playlists", "view"):
+        data["manifestos"] = get_output_manifests()
+        PROCESS_STATE["manifestos"] = data["manifestos"]
+
     if user and has_permission(manager.db, int(user["id"]), user["role"], "logs", "view"):
         data["logs"] = list(PROCESS_LOGS)
         data["log_count"] = len(PROCESS_LOGS)
-    else:
-        data.pop("logs", None)
-        data.pop("log_count", None)
-    if user and has_permission(manager.db, int(user["id"]), user["role"], "logs", "view"):
         data["historico"] = manager.db.list_process_runs(limit=20)
-    else:
-        data.pop("historico", None)
+
+    if user and has_permission(manager.db, int(user["id"]), user["role"], "sync", "view"):
+        data["sync"] = {
+            "status": PROCESS_STATE["status"],
+            "active": PROCESS_STATE["status"] in ("Executando...", "Pausado"),
+        }
+
     return jsonify(data)
 
 
@@ -325,6 +339,10 @@ def api_upload_channel_logo():
 @app.route("/api/v1/users", methods=["GET", "POST"])
 @require_role("admin")
 def api_users():
+    user = current_user(manager.db)
+    required_action = "create" if request.method == "POST" else "view"
+    if not user or not has_permission(manager.db, int(user["id"]), user["role"], "users", required_action):
+        return {"error": "Permissão insuficiente", "resource": "users", "action": required_action}, 403
     if request.method == "POST":
         data = dict(request.get_json(silent=True) or request.form)
         user = authz_create_user(manager.db, data)

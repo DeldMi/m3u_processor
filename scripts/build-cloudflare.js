@@ -7,6 +7,17 @@ const FRONTEND = path.join(ROOT, 'frontend', 'react');
 const DIST = path.join(FRONTEND, 'dist');
 const isWindows = process.platform === 'win32';
 const npmCommand = isWindows ? 'npm.cmd' : 'npm';
+const bunCommand = isWindows ? 'bun.exe' : 'bun';
+
+function executableExists(command) {
+    const result = spawnSync(command, ['--version'], {
+        cwd: ROOT,
+        stdio: 'ignore',
+        shell: false,
+        env: process.env,
+    });
+    return !result.error && result.status === 0;
+}
 
 function run(command, args, label, cwd = ROOT) {
     console.log(`\n==> ${label}`);
@@ -41,38 +52,62 @@ function frontendTool(name) {
     );
 }
 
+function rootTool(name) {
+    return path.join(
+        ROOT,
+        'node_modules',
+        '.bin',
+        isWindows ? `${name}.cmd` : name,
+    );
+}
+
 if (!fs.existsSync(path.join(FRONTEND, 'package.json'))) {
     console.error('[ERRO] package.json do frontend não encontrado em frontend/react.');
     process.exit(1);
 }
 
-// Cloudflare pode executar `bun install` na raiz antes deste script. Mesmo com
-// o workspace declarado, a plataforma pode não materializar as dependências
-// no diretório esperado pelo npm. Por isso, a presença real do TypeScript é a
-// condição de prontidão do frontend.
 const tsc = frontendTool('tsc');
+const rootTsc = rootTool('tsc');
+const hasBun = executableExists(bunCommand);
 
-if (!fs.existsSync(tsc)) {
+// Cloudflare Pages normalmente executa `bun install` antes do build. Bun pode
+// hoistar as dependências no node_modules da raiz, sem criar
+// frontend/react/node_modules. Nesse caso, não devemos iniciar um segundo
+// gerenciador de pacotes com `npm ci`, pois o lockfile do npm pode não existir
+// no ambiente efêmero do Pages.
+if (!fs.existsSync(tsc) && !fs.existsSync(rootTsc)) {
     console.log('[INFO] Dependências do frontend não estão prontas. Instalando agora...');
 
-    // Use `npm install`, e não `npm ci`, como fallback de build. O ambiente do
-    // Cloudflare pode remover/ignorar lockfiles durante a etapa automática de
-    // instalação (especialmente quando Bun é o gerenciador detectado). `npm
-    // install` funciona tanto com quanto sem package-lock.json.
-    run(
-        npmCommand,
-        ['install', '--no-audit', '--no-fund'],
-        'Instalar dependências do frontend',
-        FRONTEND,
-    );
+    if (hasBun) {
+        run(
+            bunCommand,
+            ['install'],
+            'Instalar dependências com Bun',
+            ROOT,
+        );
+    } else {
+        run(
+            npmCommand,
+            ['install', '--no-audit', '--no-fund'],
+            'Instalar dependências do frontend',
+            FRONTEND,
+        );
+    }
 }
 
-if (!fs.existsSync(tsc)) {
-    console.error('[ERRO] TypeScript não foi instalado corretamente em frontend/react/node_modules.');
+const resolvedTsc = fs.existsSync(tsc) ? tsc : rootTsc;
+if (!fs.existsSync(resolvedTsc)) {
+    console.error('[ERRO] TypeScript não foi instalado corretamente.');
     process.exit(1);
 }
 
-run(npmCommand, ['run', 'build'], 'Build Cloudflare Pages', FRONTEND);
+// Se o ambiente já instalou com Bun, mantenha Bun como gerenciador do build.
+// Caso contrário, use npm para instalações locais tradicionais.
+if (hasBun) {
+    run(bunCommand, ['run', 'build'], 'Build Cloudflare Pages', FRONTEND);
+} else {
+    run(npmCommand, ['run', 'build'], 'Build Cloudflare Pages', FRONTEND);
+}
 
 if (!fs.existsSync(path.join(DIST, 'index.html'))) {
     console.error('[ERRO] O build Cloudflare não gerou frontend/react/dist/index.html.');

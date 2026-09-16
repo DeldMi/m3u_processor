@@ -2,8 +2,6 @@ const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 
-// A raiz é sempre calculada a partir do próprio script. Isso evita caminhos
-// absolutos gravados no projeto e permite mover o repositório de pasta.
 const rootDir = path.resolve(__dirname, '..');
 const isWin = process.platform === 'win32';
 const dryRun = process.argv.includes('--dry-run');
@@ -27,8 +25,8 @@ function run(command, args, options = {}) {
 
 function runNpm(args) {
     if (!isWin) return run('npm', args);
-    // cmd.exe é usado explicitamente para evitar EINVAL de spawnSync ao
-    // iniciar npm.cmd em alguns ambientes Windows.
+    // No Windows, executar npm.cmd diretamente com spawnSync pode produzir
+    // EINVAL em algumas combinações de Node/Windows. cmd.exe é mais estável.
     const commandLine = ['npm', ...args.map((arg) => quoteCmdArg(String(arg)))].join(' ');
     return run(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', commandLine], { shell: false });
 }
@@ -115,6 +113,19 @@ function frontendDepsHealthy() {
     return fs.existsSync(frontendBin('vite')) && fs.existsSync(frontendBin('tsc'));
 }
 
+function cleanFrontendNodeModules(nodeModules) {
+    try {
+        if (fs.existsSync(nodeModules)) {
+            fs.rmSync(nodeModules, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 });
+        }
+        return true;
+    } catch (error) {
+        log(`[ERRO] O Windows não conseguiu remover frontend/react/node_modules: ${error.message}`);
+        log('[ERRO] Um processo está mantendo arquivos abertos, provavelmente esbuild.exe, vite ou Node.js.');
+        return false;
+    }
+}
+
 function installFrontendDeps() {
     const frontendDir = path.join(rootDir, 'frontend', 'react');
     const packageJson = path.join(frontendDir, 'package.json');
@@ -139,20 +150,24 @@ function installFrontendDeps() {
         firstError = error;
     }
 
-    if (firstError && isWin && !frontendDepsHealthy()) {
-        log('[WARN] A instalação npm falhou. Tentando recuperar node_modules do frontend...');
-        try {
-            fs.rmSync(nodeModules, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 });
-        } catch (cleanupError) {
+    if (firstError) {
+        // npm ci pode falhar porque o Windows não consegue substituir um
+        // binário nativo (especialmente esbuild.exe). Não presumimos a causa;
+        // verificamos se o conjunto de ferramentas realmente ficou utilizável.
+        if (!isWin || frontendDepsHealthy()) throw firstError;
+
+        log('[WARN] A instalação npm não terminou corretamente e o frontend ainda está incompleto.');
+        log('[INFO] Tentando uma recuperação limpa de frontend/react/node_modules...');
+
+        if (!cleanFrontendNodeModules(nodeModules)) {
             fail(
-                'Não foi possível limpar frontend/react/node_modules porque um processo do Windows está usando arquivos dele. ' +
-                'Feche Vite/Node/Cursor/VS Code e tente `npm run setup` novamente. ' +
-                `Detalhe: ${cleanupError.message}`
+                'Não foi possível liberar frontend/react/node_modules. ' +
+                'Feche todas as janelas do M3U Processor, Vite, Node.js, Cursor/VS Code e terminais que estejam usando o projeto. ' +
+                'Depois execute `taskkill /F /IM node.exe /T` e rode `npm run setup` novamente.'
             );
         }
+
         runNpm(installArgs);
-    } else if (firstError) {
-        throw firstError;
     }
 
     if (!frontendDepsHealthy()) {

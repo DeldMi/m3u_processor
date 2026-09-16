@@ -23,6 +23,14 @@ ROUTE_PERMISSIONS = {
     "view_dashboard": ("dashboard", "view"),
 }
 
+# Rotas que aceitam mais de um método precisam de uma permissão diferente por operação.
+ROUTE_METHOD_PERMISSIONS = {
+    "api_users": {
+        "GET": ("users", "view"),
+        "POST": ("users", "create"),
+    },
+}
+
 
 def login_user(user_row: dict):
     session.clear()
@@ -95,13 +103,20 @@ def _permission_denied(permission):
     abort(403)
 
 
+def _route_permission(endpoint_name: str):
+    method_permissions = ROUTE_METHOD_PERMISSIONS.get(endpoint_name)
+    if method_permissions:
+        return method_permissions.get(request.method)
+    return ROUTE_PERMISSIONS.get(endpoint_name)
+
+
 def require_role(min_role: str):
-    """Compatibilidade legada: rotas mapeadas usam a autorização granular."""
+    """Compatibilidade legada: rotas mapeadas usam autorização granular por método."""
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             user = current_user()
-            permission = ROUTE_PERMISSIONS.get(f.__name__)
+            permission = _route_permission(f.__name__)
             if not user:
                 if _api_token_is_valid() and request.path.startswith("/api/") and permission and permission[0] in {"dashboard", "health", "logs", "playlists", "channels", "sync", "settings", "public_files"}:
                     return f(*args, **kwargs)

@@ -11,7 +11,6 @@ const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
 const isWindows = process.platform === 'win32';
-const npmCommand = isWindows ? 'npm.cmd' : 'npm';
 const venvPython = isWindows
     ? path.join(ROOT, '.venv', 'Scripts', 'python.exe')
     : path.join(ROOT, '.venv', 'bin', 'python');
@@ -19,12 +18,16 @@ const pythonCandidates = isWindows ? [venvPython, 'py', 'python'] : [venvPython,
 
 function run(command, args, label, options = {}) {
     console.log(`\n==> ${label}`);
-    const result = spawnSync(command, args, {
+    const executable = isWindows && command === 'npm'
+        ? process.env.ComSpec || 'cmd.exe'
+        : command;
+    const executableArgs = isWindows && command === 'npm'
+        ? ['/d', '/s', '/c', ['npm', ...args].map((arg) => JSON.stringify(String(arg))).join(' ')]
+        : args;
+    const result = spawnSync(executable, executableArgs, {
         cwd: ROOT,
         stdio: 'inherit',
-        // npm.cmd é um script CMD no Windows e precisa de shell para ser
-        // iniciado por spawnSync. Python e executáveis reais não precisam.
-        shell: options.shell ?? (isWindows && command === npmCommand),
+        shell: false,
         env: { ...process.env, ...(options.env || {}) },
     });
 
@@ -59,7 +62,6 @@ if (!python) {
     console.error('Python não encontrado. Execute `npm run setup` primeiro.');
     ok = false;
 } else {
-    // Todos os testes Python devem usar o mesmo virtualenv que a aplicação.
     ok = run(python, ['-m', 'compileall', '-q', 'src'], 'Sintaxe Python') && ok;
     ok = run(python, ['-m', 'unittest', 'discover', '-s', 'tests', '-v'], 'Testes Python') && ok;
 }
@@ -72,10 +74,9 @@ if (!fs.existsSync(frontendModules)) {
     ok = false;
 } else {
     ok = run(
-        npmCommand,
+        'npm',
         ['--prefix', 'frontend/react', 'run', 'build'],
         'Build React/TypeScript',
-        { shell: isWindows },
     ) && ok;
 }
 

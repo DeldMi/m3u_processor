@@ -195,7 +195,7 @@ def view_settings():
 @require_role("viewer")
 def get_status():
     user = current_user(manager.db)
-    data = {"status": PROCESS_STATE["status"], "ultimo_log": PROCESS_STATE["ultimo_log"]}
+    data = {"status": PROCESS_STATE["status"]}
     if user and has_permission(manager.db, int(user["id"]), user["role"], "dashboard", "view"):
         data.update({"total_canais": PROCESS_STATE["total_canais"], "canais_online": PROCESS_STATE["canais_online"], "canais_offline": PROCESS_STATE["canais_offline"]})
     if user and has_permission(manager.db, int(user["id"]), user["role"], "channels", "view"):
@@ -209,6 +209,7 @@ def get_status():
         data["manifestos"] = get_output_manifests()
         PROCESS_STATE["manifestos"] = data["manifestos"]
     if user and has_permission(manager.db, int(user["id"]), user["role"], "logs", "view"):
+        data["ultimo_log"] = PROCESS_STATE["ultimo_log"]
         data["logs"] = list(PROCESS_LOGS)
         data["log_count"] = len(PROCESS_LOGS)
         data["historico"] = manager.db.list_process_runs(limit=20)
@@ -328,6 +329,11 @@ def api_upload_channel_logo():
 def api_users():
     if request.method == "POST":
         data = dict(request.get_json(silent=True) or request.form)
+        actor = current_user(manager.db)
+        if actor and not has_permission(manager.db, int(actor["id"]), actor["role"], "users", "admin"):
+            # Criar conta não permite que um operador se autoeleve nem delegue permissões administrativas.
+            data["role"] = "viewer"
+            data.pop("permissions", None)
         user = authz_create_user(manager.db, data)
         if not user: return jsonify({"error": "Usuário inválido, senha fraca ou login já existente"}), 400
         return jsonify(user), 201
@@ -337,7 +343,12 @@ def api_users():
 @app.route("/api/v1/users/<int:user_id>", methods=["PATCH"])
 @require_role("admin")
 def api_update_user(user_id):
-    user = authz_update_user(manager.db, user_id, request.get_json(silent=True) or {})
+    data = dict(request.get_json(silent=True) or {})
+    actor = current_user(manager.db)
+    if actor and not has_permission(manager.db, int(actor["id"]), actor["role"], "users", "admin"):
+        data.pop("role", None)
+        data.pop("permissions", None)
+    user = authz_update_user(manager.db, user_id, data)
     if not user: return jsonify({"error": "Usuário não encontrado, inválido ou sem alterações"}), 400
     return jsonify(user)
 

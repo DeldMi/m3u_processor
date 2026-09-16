@@ -18,13 +18,11 @@ const pythonCandidates = isWindows ? [venvPython, 'py', 'python'] : [venvPython,
 
 function run(command, args, label, options = {}) {
     console.log(`\n==> ${label}`);
-    const executable = isWindows && command === 'npm'
-        ? process.env.ComSpec || 'cmd.exe'
-        : command;
-    const executableArgs = isWindows && command === 'npm'
-        ? ['/d', '/s', '/c', ['npm', ...args].map((arg) => JSON.stringify(String(arg))).join(' ')]
-        : args;
-    const result = spawnSync(executable, executableArgs, {
+
+    // No Windows, npm é um script .cmd. Executá-lo diretamente com shell:false
+    // evita problemas de quoting/escaping do `cmd /c` e mantém a execução segura.
+    const executable = isWindows && command === 'npm' ? 'npm.cmd' : command;
+    const result = spawnSync(executable, args, {
         cwd: ROOT,
         stdio: 'inherit',
         shell: false,

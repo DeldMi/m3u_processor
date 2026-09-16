@@ -38,7 +38,7 @@ export function App() {
     let content: ReactNode = <Dashboard user={user} />;
     if (path === "/channels") content = <Channels user={user} />;
     if (path === "/playlists") content = <Playlists user={user} />;
-    if (path === "/settings") content = <SettingsPage user={user} />;
+    if (path === "/settings") content = <SettingsPage />;
     if (path === "/users") content = <UsersPage user={user} />;
     return <Shell user={user}>{content}<Player /></Shell>;
 }

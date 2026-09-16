@@ -7,6 +7,10 @@ import re
 import shutil
 import sqlite3
 import sys
+import platform
+import socket
+import subprocess
+from urllib.parse import urlparse
 from werkzeug.utils import secure_filename
 from collections import deque
 from datetime import datetime
@@ -85,6 +89,45 @@ def add_process_log(message: str, level: str = "info"):
         manager.db.add_process_event(message, level, ACTIVE_RUN_ID)
     except (OSError, sqlite3.OperationalError):
         pass
+
+def _resolve_ping_host(target: str) -> str:
+    """Converte um IP, domínio ou URL em um host adequado ao comando ping."""
+    value = str(target or "").strip()
+    if not value:
+        return "1.1.1.1"
+    parsed = urlparse(value if "://" in value else f"//{value}")
+    host = parsed.hostname or value.split("/", 1)[0]
+    return host.strip("[]")
+
+def check_internet_health() -> dict:
+    """Executa um único teste ICMP sem shell e retorna status e latência."""
+    cfg = manager.config_mgr.get_all()
+    target = str(cfg.get("INTERNET_TEST_TARGET") or "1.1.1.1").strip()
+    interval_seconds = max(1, int(cfg.get("INTERNET_PING_INTERVAL_SECONDS", 5)))
+    timeout_seconds = max(0.2, min(float(cfg.get("INTERNET_PING_TIMEOUT_SECONDS", 2)), 30.0))
+    host = _resolve_ping_host(target)
+    start = time.perf_counter()
+    system = platform.system().lower()
+    if system == "windows":
+        command = ["ping", "-n", "1", "-w", str(int(timeout_seconds * 1000)), host]
+    else:
+        command = ["ping", "-c", "1", "-W", str(max(1, int(timeout_seconds))), host]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=timeout_seconds + 2, check=False)
+        latency_ms = round((time.perf_counter() - start) * 1000, 2)
+        if result.returncode == 0:
+            return {"online": True, "target": target, "host": host, "latency_ms": latency_ms, "interval_seconds": interval_seconds, "timeout_seconds": timeout_seconds, "error": ""}
+        return {"online": False, "target": target, "host": host, "latency_ms": latency_ms, "interval_seconds": interval_seconds, "timeout_seconds": timeout_seconds, "error": "Destino sem resposta"}
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
+        # Fallback simples: testa TCP/443 quando o utilitário ICMP não existe no sistema.
+        try:
+            fallback_start = time.perf_counter()
+            with socket.create_connection((host, 443), timeout=timeout_seconds):
+                latency_ms = round((time.perf_counter() - fallback_start) * 1000, 2)
+                return {"online": True, "target": target, "host": host, "latency_ms": latency_ms, "interval_seconds": interval_seconds, "timeout_seconds": timeout_seconds, "error": "Ping ICMP indisponível; conexão TCP/443 confirmada"}
+        except OSError:
+            latency_ms = round((time.perf_counter() - start) * 1000, 2)
+            return {"online": False, "target": target, "host": host, "latency_ms": latency_ms, "interval_seconds": interval_seconds, "timeout_seconds": timeout_seconds, "error": str(exc)}
 
 def has_sufficient_disk_space() -> bool:
     return shutil.disk_usage(BASE_DIR).free >= MIN_FREE_SPACE_BYTES
@@ -308,6 +351,11 @@ def get_status():
     data["log_count"] = len(PROCESS_LOGS)
     data["historico"] = manager.db.list_process_runs(limit=20)
     return jsonify(data)
+
+@app.route("/api/v1/internet-health")
+@require_role("viewer")
+def api_internet_health():
+    return jsonify(check_internet_health())
 
 @app.route("/api/v1/logs")
 @require_role("viewer")

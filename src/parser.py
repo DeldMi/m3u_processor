@@ -18,6 +18,7 @@ class M3UParser:
                 name = "Canal Desconhecido"
                 tvg_id = ""
                 logo = ""
+                channel_number = None
 
                 if current_metadata:
                     # Extrai atributos tvg-id e o nome apos a virgula
@@ -27,6 +28,12 @@ class M3UParser:
                     logo_match = re.search(r'tvg-logo="([^"]*)"', current_metadata, re.IGNORECASE)
                     if logo_match:
                         logo = logo_match.group(1).strip()
+                    number_match = re.search(r'tvg-chno="([^"]*)"', current_metadata, re.IGNORECASE)
+                    if number_match:
+                        try:
+                            channel_number = int(number_match.group(1).strip())
+                        except ValueError:
+                            channel_number = None
                     name_match = re.search(r",([^,]+)$", current_metadata)
                     if name_match:
                         name = name_match.group(1).strip()
@@ -37,6 +44,7 @@ class M3UParser:
                     "metadata": current_metadata,
                     "name": name,
                     "tvg_id": tvg_id,
+                    "channel_number": channel_number,
                     "logo": logo,
                     "url": url,
                     "source": source_identifier

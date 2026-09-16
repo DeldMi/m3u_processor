@@ -50,6 +50,7 @@ class Database:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS channels (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    channel_number INTEGER,
                     url TEXT UNIQUE NOT NULL,
                     name TEXT NOT NULL,
                     metadata TEXT,
@@ -71,6 +72,12 @@ class Database:
                 cursor.execute("ALTER TABLE channels ADD COLUMN logo TEXT DEFAULT '';" )
             except sqlite3.OperationalError:
                 pass
+            try:
+                cursor.execute("ALTER TABLE channels ADD COLUMN channel_number INTEGER;")
+            except sqlite3.OperationalError:
+                pass
+            # Canais antigos usam o ID interno como número visual até o usuário definir outro número.
+            cursor.execute("UPDATE channels SET channel_number = id WHERE channel_number IS NULL;")
 
             # Tabela de Integracoes Externas e Webhooks
             cursor.execute("""
@@ -117,6 +124,7 @@ class Database:
     def upsert_channel(self, ch: Dict[str, Any]):
         record = {
             "url": ch.get("url", ""),
+            "channel_number": ch.get("channel_number"),
             "name": ch.get("name", "Canal Desconhecido"),
             "metadata": ch.get("metadata", ""),
             "tvg_id": ch.get("tvg_id", ""),
@@ -132,9 +140,10 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO channels (url, name, metadata, tvg_id, logo, group_title, country, state, city, category, auto_remove_if_offline)
-                VALUES (:url, :name, :metadata, :tvg_id, :logo, :group_title, :country, :state, :city, :category, :auto_remove_if_offline)
+                INSERT INTO channels (url, channel_number, name, metadata, tvg_id, logo, group_title, country, state, city, category, auto_remove_if_offline)
+                VALUES (:url, :channel_number, :name, :metadata, :tvg_id, :logo, :group_title, :country, :state, :city, :category, :auto_remove_if_offline)
                 ON CONFLICT(url) DO UPDATE SET
+                    channel_number=COALESCE(channels.channel_number, excluded.channel_number),
                     name=excluded.name,
                     metadata=excluded.metadata,
                     tvg_id=excluded.tvg_id,
@@ -183,7 +192,7 @@ class Database:
             query += " AND (name LIKE ? OR url LIKE ? OR tvg_id LIKE ? OR group_title LIKE ? OR country LIKE ? OR state LIKE ? OR city LIKE ?)"
             params.extend([term] * 7)
 
-        sort_columns = {"id", "name", "country", "state", "city", "category", "status", "group_title", "tvg_id", "latency_ms", "last_checked"}
+        sort_columns = {"id", "channel_number", "name", "country", "state", "city", "category", "status", "group_title", "tvg_id", "latency_ms", "last_checked"}
         safe_sort = sort if sort in sort_columns else "id"
         safe_direction = "DESC" if direction.lower() == "desc" else "ASC"
 
@@ -202,8 +211,17 @@ class Database:
             return result
 
     def update_channel(self, channel_id: int, values: Dict[str, Any]) -> bool:
-        allowed = {"url", "name", "tvg_id", "logo", "group_title", "country", "state", "city", "category", "status", "auto_remove_if_offline", "metadata"}
+        allowed = {"url", "channel_number", "name", "tvg_id", "logo", "group_title", "country", "state", "city", "category", "status", "auto_remove_if_offline", "metadata"}
         changes = {key: value for key, value in values.items() if key in allowed}
+        if "channel_number" in changes:
+            raw_number = changes["channel_number"]
+            if raw_number in ("", None):
+                changes["channel_number"] = None
+            else:
+                try:
+                    changes["channel_number"] = max(0, int(raw_number))
+                except (TypeError, ValueError):
+                    return False
         if not changes:
             return False
         assignments = ", ".join(f"{key} = ?" for key in changes)

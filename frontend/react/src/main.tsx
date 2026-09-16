@@ -37,6 +37,7 @@ type User = {
 };
 type Channel = {
     id: number;
+    channel_number?: number | null;
     name: string;
     url: string;
     logo?: string;
@@ -71,6 +72,16 @@ type Status = {
     log_count: number;
 };
 type ChannelOptions = { country: string[]; state: string[]; city: string[]; category: string[]; status: string[] };
+type InternetHealth = {
+    online: boolean;
+    target: string;
+    host: string;
+    latency_ms: number;
+    interval_seconds?: number;
+    timeout_seconds?: number;
+    error?: string;
+};
+
 type ChannelColumn = "status" | "id" | "logo" | "name" | "country" | "state" | "city" | "playlist" | "group_title" | "xmltv_file" | "tvg_id" | "latency_ms" | "auto_remove" | "actions";
 
 const api = async <T,>(url: string, options?: RequestInit) => {
@@ -267,6 +278,7 @@ function Modal({
 
 function Dashboard({ user }: { user: User }) {
     const [data, setData] = useState<Status | null>(null);
+    const [internet, setInternet] = useState<InternetHealth | null>(null);
     const load = () =>
         api<Status>("/api/status")
             .then(setData)
@@ -274,6 +286,12 @@ function Dashboard({ user }: { user: User }) {
     useEffect(() => {
         load();
         const t = setInterval(load, 3000);
+        return () => clearInterval(t);
+    }, []);
+    useEffect(() => {
+        const loadInternet = () => api<InternetHealth>("/api/v1/internet-health").then(setInternet).catch(() => setInternet(null));
+        loadInternet();
+        const t = setInterval(loadInternet, 5000);
         return () => clearInterval(t);
     }, []);
     const total = data?.total_canais || 0;
@@ -346,6 +364,23 @@ function Dashboard({ user }: { user: User }) {
                     detail="última verificação"
                     tone="red"
                 />
+            </section>
+            <section className="panel internet-status-panel">
+                <PanelTitle kicker="CONECTIVIDADE" title="Internet" badge="TESTE AUTOMÁTICO" />
+                <div className="internet-status-content">
+                    <div className={`internet-status ${internet?.online ? "online" : internet ? "offline" : "unknown"}`}>
+                        <i className="internet-status-dot" />
+                        <strong>{internet?.online ? "ONLINE" : internet ? "OFFLINE" : "VERIFICANDO"}</strong>
+                    </div>
+                    <div className="internet-ping">
+                        <span>Ping</span>
+                        <b>{internet ? `${internet.latency_ms} ms` : "—"}</b>
+                    </div>
+                    <div className="internet-target">
+                        <span>Destino</span>
+                        <b title={internet?.target || ""}>{internet?.target || "Carregando configuração..."}</b>
+                    </div>
+                </div>
             </section>
             <section className="split-grid">
                 <div className="panel health-panel">
@@ -461,7 +496,7 @@ function Channels({ user }: { user: User }) {
         city: "todos",
         category: "todos",
         status: "todos",
-        sort: "id",
+        sort: "channel_number",
         direction: "asc",
     });
     const [page, setPage] = useState(1);
@@ -630,7 +665,7 @@ function Channels({ user }: { user: User }) {
                                 <tr key={c.id}>
                                     <td><input type="checkbox" checked={selected.includes(c.id)} onChange={(e) => setSelected(e.target.checked ? [...selected, c.id] : selected.filter((id) => id !== c.id))} /></td>
                                     {columns.includes("status") && <td><button className={`status-dot ${c.status}`} disabled={!canEdit(user)} onClick={() => patch(`/api/v1/channels/${c.id}/status`, { status: c.status === "online" ? "offline" : "online" })} /></td>}
-                                    {columns.includes("id") && <td>{c.id}</td>}
+                                    {columns.includes("id") && <td>{c.channel_number ?? c.id}</td>}
                                     {columns.includes("logo") && <td><span className="channel-logo">{c.logo ? <img src={c.logo} onError={(e) => { e.currentTarget.style.display = "none"; }} /> : <Wifi size={14} />}</span></td>}
                                     {columns.includes("name") && <td className="channel-name"><b>{c.name}</b></td>}
                                     {columns.includes("country") && <td>{c.country || "-"}</td>}
@@ -724,6 +759,16 @@ function ChannelEditor({
                             />
                         </label>
                     ))}
+                    <label>CH. NO.
+                        <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={form.channel_number ?? ""}
+                            onChange={(e) => set("channel_number", e.target.value === "" ? "" : Number(e.target.value))}
+                            placeholder="Ex.: 10"
+                        />
+                    </label>
                     <label>Logo por URL<input value={String(form.logo || "")} onChange={(e) => set("logo", e.target.value)} placeholder="https://..." /></label>
                     <label>Enviar logo do computador<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={uploading} onChange={(e) => e.target.files?.[0] && uploadLogo(e.target.files[0])} /></label>
                 </div>
@@ -1259,6 +1304,24 @@ function SettingsPage() {
                         onChange={(e) => set("EPG_URLS", e.target.value)}
                     />
                 </label>
+                <div className="settings-test-card">
+                    <PanelTitle kicker="CONECTIVIDADE" title="Teste de internet e ping" badge="TEMPO REAL" />
+                    <div className="form-grid">
+                        <label>Destino do teste (IP ou URL)
+                            <input value={String(config.INTERNET_TEST_TARGET || "")} onChange={(e) => set("INTERNET_TEST_TARGET", e.target.value)} placeholder="https://1.1.1.1" />
+                        </label>
+                        <label>Delay entre testes (segundos)
+                            <input type="number" min="1" value={String(config.INTERNET_PING_INTERVAL_SECONDS || "5")} onChange={(e) => set("INTERNET_PING_INTERVAL_SECONDS", e.target.value)} />
+                        </label>
+                        <label>Tempo máximo do ping (segundos)
+                            <input type="number" min="0.2" step="0.1" value={String(config.INTERNET_PING_TIMEOUT_SECONDS || "2")} onChange={(e) => set("INTERNET_PING_TIMEOUT_SECONDS", e.target.value)} />
+                        </label>
+                    </div>
+                    <InternetTestPreview
+                        target={String(config.INTERNET_TEST_TARGET || "")}
+                        intervalSeconds={Math.max(1, Number(config.INTERNET_PING_INTERVAL_SECONDS || 5))}
+                    />
+                </div>
                 <button className="button primary" onClick={save}>
                     <Save size={15} />{" "}
                     {saved ? "Configurações salvas" : "Salvar configurações"}
@@ -1267,6 +1330,24 @@ function SettingsPage() {
         </>
     );
 }
+function InternetTestPreview({ target, intervalSeconds }: { target: string; intervalSeconds: number }) {
+    const [result, setResult] = useState<InternetHealth | null>(null);
+    useEffect(() => {
+        const run = () => api<InternetHealth>("/api/v1/internet-health").then(setResult).catch(() => setResult(null));
+        run();
+        const t = setInterval(run, intervalSeconds * 1000);
+        return () => clearInterval(t);
+    }, [target, intervalSeconds]);
+    return (
+        <div className={`internet-test-box ${result?.online ? "online" : result ? "offline" : "unknown"}`}>
+            <div><span>Status</span><strong>{result?.online ? "ONLINE" : result ? "OFFLINE" : "VERIFICANDO"}</strong></div>
+            <div><span>Ping</span><strong>{result ? `${result.latency_ms} ms` : "—"}</strong></div>
+            <div><span>Destino</span><strong title={result?.target || target}>{result?.target || target || "—"}</strong></div>
+            {result?.error && <small>{result.error}</small>}
+        </div>
+    );
+}
+
 function UsersPage() {
     const [users, setUsers] = useState<User[]>([]);
     const [form, setForm] = useState({

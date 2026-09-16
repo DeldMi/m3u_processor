@@ -22,8 +22,8 @@ Sistema para:
 
 #### Pagina "Painel Geral"
 
-- Coloca uma opição que ver se a internet esta On ou Off com a boninha da cor do startus 
-  - Ao lado o ping da internet (e a conviguração de onde vai ping na (pagina configuração)[#### Pagina "Configurações"]). 
+- Coloca uma opição que ver se a internet esta On ou Off com a boninha da cor do startus
+  - Ao lado o ping da internet (e a conviguração de onde vai ping na (pagina configuração)[#### Pagina "Configurações"]).
 
 #### Pagina "Canais e editor"
 
@@ -32,7 +32,7 @@ Sistema para:
 #### Pagina "Configurações"
 
 - Tera uma card de configuração de teste da internet e ping
-  - um input para coloca o ip ou link que vai ser pingado 
+  - um input para coloca o ip ou link que vai ser pingado
   - um input para coloca o temp de delay e temp de ping
   - um a caixa mostando em tempo real o ping com a configuração atual
 

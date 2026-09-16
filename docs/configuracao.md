@@ -20,6 +20,9 @@ SCHEDULE_MODE='DISABLED'
 SCHEDULE_INTERVAL_HOURS=12
 SCHEDULE_CRON_TIME=03:00
 HEALTH_CHECK_INTERVAL_SECONDS=60
+INTERNET_TEST_TARGET=https://1.1.1.1
+INTERNET_PING_INTERVAL_SECONDS=5
+INTERNET_PING_TIMEOUT_SECONDS=2
 WEB_HOST=127.0.0.1
 WEB_PORT=5000
 BASE_URL=http://127.0.0.1:5000
@@ -33,6 +36,16 @@ SECRET_KEY=
 plano. A rotina atualiza status, latência, código HTTP e data da última análise
 dos canais já cadastrados, sem regenerar playlists. O painel atualiza os números
 automaticamente e permite filtrar online e offline.
+
+## Teste de internet e ping
+
+A página de Configurações possui um cartão para definir o destino do teste de conectividade, o intervalo entre testes e o timeout de cada ping. O Painel Geral usa a mesma configuração para mostrar, em tempo real, se o destino está online e a latência medida.
+
+- `INTERNET_TEST_TARGET`: IP, domínio ou URL que será testado.
+- `INTERNET_PING_INTERVAL_SECONDS`: intervalo de atualização usado pela interface.
+- `INTERNET_PING_TIMEOUT_SECONDS`: tempo máximo de espera de cada teste.
+
+O backend executa o ICMP sem `shell` e, quando o utilitário `ping` não estiver disponível, tenta uma conexão TCP na porta 443 do destino como fallback de conectividade.
 
 ## Configurações opcionais
 

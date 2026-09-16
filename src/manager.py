@@ -194,6 +194,11 @@ class PlaylistManager:
                 f.write(f'#EXTM3U url-tvg="{base_url}/epg/{xml_name}"\n')
                 for ch in chunk:
                     meta = ch.get("metadata") or f'#EXTINF:-1 tvg-id="{ch.get("tvg_id", ch.get("name", ""))}",{ch.get("name", "Canal Desconhecido")}'
+                    channel_number = ch.get("channel_number")
+                    if channel_number is not None:
+                        meta = re.sub(r'\s+tvg-chno="[^"]*"', "", meta, flags=re.IGNORECASE)
+                        extinf_prefix, extinf_rest = meta.split(",", 1) if "," in meta else (meta, ch.get("name", "Canal Desconhecido"))
+                        meta = f'{extinf_prefix} tvg-chno="{int(channel_number)}",{extinf_rest}'
                     f.write(f'{meta}\n{ch["url"]}\n')
 
             manifests.append({

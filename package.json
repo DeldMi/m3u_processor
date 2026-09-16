@@ -2,6 +2,8 @@
     "name": "m3u-processor",
     "version": "1.0.0",
     "private": true,
+    "author": "DeldMi",
+    "license": "SEE LICENSE IN LICENSE",
     "description": "Ambiente completo para executar e configurar o M3U Processor",
     "scripts": {
         "setup": "node ./scripts/setup.js",

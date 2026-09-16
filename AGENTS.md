@@ -6,6 +6,10 @@ Este arquivo guarda o contexto operacional do projeto para que IA, copilotos e o
 
 M3U Processor / M3U Architect
 
+Autor e titular declarado: DeldMi
+Licenca: LICENSE (uso gratuito com atribuicao obrigatoria)
+Aviso de autoria: NOTICE
+
 Sistema para:
 - processar listas IPTV/M3U
 - validar canais online/offline
@@ -40,6 +44,8 @@ Sistema para:
 - logs/ — relatórios JSON de auditoria
 - data/ — banco SQLite e dados persistentes
 - docs/ — documentação detalhada
+- LICENSE — licença de uso, atribuição e proteção de autoria
+- NOTICE — créditos e titularidade declarada
 - scripts/ — scripts de setup e execução
 - package.json — comando principal para ambiente raiz
 - .env / .env.example — configurações
@@ -227,6 +233,7 @@ ou:
 - docs/configuracao.md — configuração
 - docs/troubleshooting.md — problemas comuns
 - docs/acesso-e-recuperacao.md — senhas e recuperação de acesso
+- docs/direitos-e-doacoes.md — autoria, licença, créditos e doações
 
 ## Regras para agentes e chats
 
@@ -238,6 +245,8 @@ ou:
 - O menu roda em `WEB_PORT`/`BASE_URL`; playlists e EPG rodam em servidor separado usando `PUBLIC_PORT`/`PUBLIC_BASE_URL`.
 - O servidor público deve aceitar somente `/playlist/...` e `/epg/...`, sem expor menu ou APIs.
 - Alterações de `WEB_PORT` ou `PUBLIC_PORT` exigem reiniciar os processos ou os serviços Docker.
+- Alterações no projeto devem preservar os créditos de DeldMi, o arquivo LICENSE e o arquivo NOTICE.
+- Componentes de terceiros devem manter suas próprias licenças e créditos.
 
 ## Resumo do que o usuário prioriza
 

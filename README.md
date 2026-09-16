@@ -2,6 +2,13 @@
 
 Sistema para processar listas M3U/IPTV, validar canais em tempo real, classificar metadados, gerar playlists M3U e EPG XMLTV, e publicar links públicos para distribuição.
 
+**Autor e titular do projeto:** DeldMi
+
+Este projeto é gratuito e possui licença própria de uso livre com atribuição.
+Consulte [LICENSE](LICENSE), [NOTICE](NOTICE) e [docs/direitos-e-doacoes.md](docs/direitos-e-doacoes.md)
+antes de redistribuir ou criar um produto derivado. Doações são voluntárias e
+ajudam a manter a infraestrutura e as atualizações.
+
 ## O que é este projeto
 
 Este projeto combina:
@@ -102,6 +109,7 @@ Variáveis principais:
 Mais detalhes em:
 
 - [docs/acesso-e-recuperacao.md](docs/acesso-e-recuperacao.md)
+- [docs/direitos-e-doacoes.md](docs/direitos-e-doacoes.md)
 
 ## Documentação detalhada
 

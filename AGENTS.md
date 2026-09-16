@@ -1,347 +1,209 @@
 # AGENTS.md
 
-Este arquivo guarda o contexto operacional do projeto para que IA, copilotos e outros chats possam entender rapidamente o que existe, como rodar, o que foi alterado e o que o usuário prioriza.
+Contexto operacional do **M3U Processor / M3U Architect** para IAs, copilotos e colaboradores.
 
 ## Projeto
 
-M3U Processor / M3U Architect
-
-Autor e titular declarado: DeldMi
-Licenca: LICENSE (uso gratuito com atribuicao obrigatoria)
-Aviso de autoria: NOTICE
-
-Sistema para:
-- processar listas IPTV/M3U
-- validar canais online/offline
-- classificar canais por país, estado, cidade e categoria
-- gerar arquivos M3U e XMLTV/EPG em blocos
-- publicar links públicos para clientes/players
-- gerenciar usuários, permissões e configurações
-
-### Novas apricação
-
-#### Pagina "Painel Geral"
-
-- Coloca uma opição que ver se a internet esta On ou Off com a boninha da cor do startus
-  - Ao lado o ping da internet (e a conviguração de onde vai ping na (pagina configuração)[#### Pagina "Configurações"]).
-
-#### Pagina "Canais e editor"
-
-- na edição do canal coloca uma opção para editar o numero do canal (CH. NO.).
-
-#### Pagina "Configurações"
-
-- Tera uma card de configuração de teste da internet e ping
-  - um input para coloca o ip ou link que vai ser pingado
-  - um input para coloca o temp de delay e temp de ping
-  - um a caixa mostando em tempo real o ping com a configuração atual
-
-## Stack principal
-
+- Autor/titular declarado: **DeldMi**
+- Licença: `LICENSE`
+- Créditos: `NOTICE`
 - Backend: Python + Flask
 - Frontend: React + Vite + TypeScript + Tailwind + SCSS
 - Banco: SQLite
 - Agendamento: APScheduler
-- Execução: Docker + Docker Compose
-- Ambiente local: scripts .bat/.sh + package.json raiz
+- Execução: Windows/Linux/macOS e Docker
 
-## Estrutura do projeto
+Sistema para processar listas M3U/M3U8, validar canais, classificar metadados, gerar M3U/XMLTV em blocos, publicar arquivos e gerenciar usuários, permissões e configurações.
 
-- src/ — backend e lógica de processamento
-  - app.py — rotas, APIs, autenticação e servidores de arquivos
-  - manager.py — geração de playlists, auditoria, validação e EPG
-  - db.py — schema do banco SQLite
-  - config.py — leitura e gravação do .env
-  - auth.py — sessão e RBAC
-  - parser.py, classifier.py, checker.py, epg.py
-- frontend/react — SPA em React
-  - src/main.tsx — app principal e views
-  - src/styles.scss — estilo e layout
-- input/ — fontes locais em .m3u/.m3u8/.txt
-- output/ — listas geradas e XMLTV
-- logs/ — relatórios JSON de auditoria
-- data/ — banco SQLite e dados persistentes
-- docs/ — documentação detalhada
-- LICENSE — licença de uso, atribuição e proteção de autoria
-- NOTICE — créditos e titularidade declarada
-- scripts/ — scripts de setup e execução
-- package.json — comando principal para ambiente raiz
-- .env / .env.example — configurações
-- Dockerfile / docker-compose.yml — execução em container
+## Funcionalidades obrigatórias
 
-## Funcionalidades críticas
+### Painel Geral
 
-### Autenticação e permissões
+- Indicador visual Internet **ONLINE/OFFLINE**.
+- Latência em ms.
+- Destino utilizado no teste.
+- Saúde automática dos canais sem regenerar playlists.
 
-Usuários padrão ao criar BD:
-- admin / admin123
+### Canais e Editor
 
-Roles:
-- admin — configurações, usuários e administração
-- editor — edita canais, dispara sincronização e gera listas
-- viewer — leitura e consumo de listas
+- Campo **CH. NO.** para editar o número do canal.
+- Persistência no SQLite.
+- Suporte a `tvg-chno` quando aplicável.
+- Filtros por país, estado, cidade, categoria e status.
+- Ordenação por cabeçalho.
+- Seleção persistente de colunas.
+- Upload local de logos.
 
-### Processamento
+### Configurações
 
-Fluxo principal:
-1. lê arquivos em input/
-2. lê URLs remotas em REMOTE_M3U_URLS
-3. deduplica canais
-4. valida conexão e status de cada canal
-5. persiste no banco
-6. classifica metadados
-7. gera M3U e EPG em blocos
-8. publica links em BASE_URL
+- Destino do teste de Internet/ping.
+- Intervalo/delay.
+- Timeout.
+- Resultado em tempo real.
 
-### Interface
+### Playlists/EPG
 
-Páginas principais:
-- / — dashboard
-- /channels — canais e editor
-- /playlists — listas publicadas
-- /settings — configurações
-- /users — gerenciamento de usuários
-- /login — login
+- Nome personalizado na geração.
+- Prefixo/arquivo customizado.
+- Renomeação pareada de playlist e XMLTV.
+- `BASE_URL` permanece a base pública global.
+- Servidor público deve expor somente `/playlist/...` e `/epg/...`.
 
-### Listas e nomes
+## Organização semântica
 
-Importante: o usuário pediu que a geração de listas permita nome personalizado e edição do nome/URL da lista, sem conflitar com a base URL global.
+Backend:
 
-A lógica do projeto já foi ajustada para:
-- aceitar nome de lista na geração
-- gerar arquivos com prefixo customizado
-- renomear playlist e XML pairados
-- manter `BASE_URL` como endereço público base
+- `src/app.py` — aplicação Flask e compatibilidade das rotas.
+- `src/core/scheduler.py` — APScheduler.
+- `src/domains/health/internet.py` — Internet/ping.
+- `src/domains/playlists/service.py` — publicação/manifests.
+- `src/domains/sync/service.py` — pipeline/sincronização/saúde.
+- módulos legados (`manager.py`, `parser.py`, `checker.py`, `classifier.py`, `epg.py`) permanecem por compatibilidade.
 
-### Estilos visuais
+Frontend:
 
-O frontend já teve correção para:
-- layout do dashboard e cards
-- alinhamento geral da UI
-- estilos de inputs/select/textarea
-- retorno visual consistente entre todas as telas
+- `frontend/react/src/app/App.tsx` — composição da SPA.
+- `frontend/react/src/features/` — funcionalidades por domínio.
+- `frontend/react/src/components/` — componentes compartilhados.
+- `frontend/react/src/services/api.ts` — cliente HTTP.
+- `frontend/react/src/types/` — contratos TypeScript.
+- `frontend/react/src/main.tsx` — entrypoint.
+- `frontend/react/src/styles.scss` — estilos globais.
 
-## Configuração do ambiente
+Novas funcionalidades devem entrar no domínio correspondente; não aumentar `app.py` ou `main.tsx` com lógica de negócio.
 
-Arquivo `.env` principal. Exemplo em `.env.example`.
+## Instalação oficial
 
-Variáveis importantes:
-- BASE_URL
-- PUBLIC_BASE_URL
-- WEB_HOST
-- WEB_PORT
-- PUBLIC_HOST
-- PUBLIC_PORT
-- MAX_CHANNELS_PER_FILE
-- CONCURRENCY_LIMIT
-- REQUEST_TIMEOUT
-- USER_AGENT
-- REMOTE_M3U_URLS
-- SCHEDULE_MODE
-- SCHEDULE_INTERVAL_HOURS
-- SCHEDULE_CRON_TIME
-- HEALTH_CHECK_INTERVAL_SECONDS
-- API_TOKEN
-- SECRET_KEY
+Na raiz:
 
-## Comandos oficiais
+```text
+npm run setup
+npm run verify
+npm run dev
+```
 
-Na raiz do projeto:
+Produção:
 
-- npm run setup
-  - cria .venv
-  - instala dependências Python
-  - instala dependências do frontend
-  - compila o build React
-
-- npm run dev
-  - inicia backend Flask e frontend Vite em modo desenvolvimento
-
-- npm run start
-  - inicia a aplicação em produção local
-
-- npm run build
-  - gera build do frontend React
-
-- npm run open
-  - abre a URL pública no navegador
-
-- npm run docker:up
-  - sobe o Docker Compose
-
-- npm run docker:down
-  - derruba o container
-
-- npm run docker:logs
-  - mostra logs do Docker
-
-Comandos em shell legado:
-- ./setup_env.sh
-- ./run_menu.sh
-- ./run_checker.sh
-- setup_env.bat
-- run_menu.bat
-- run_checker.bat
-
-## Execução local
-
-Linux/macOS:
-- chmod +x *.sh
-- ./setup_env.sh
-- ./run_menu.sh
-
-Windows:
-- setup_env.bat
-- run_menu.bat
+```text
+npm run setup
+npm run build
+npm run start
+```
 
 Docker:
-- docker compose up -d --build
-- acessar menu: http://localhost:5000
-- acessar links: http://localhost:8080
 
-## Observações importantes sobre ambiente
+```text
+docker compose up -d --build
+docker compose logs -f
+docker compose down
+```
 
-- O projeto precisa do Node instalado para o frontend e do Python para o backend.
-- O build do React precisa existir em frontend/react/dist para que o Flask sirva a SPA corretamente.
-- O arquivo .env deve existir antes da aplicação rodar.
-- Em produção, `BASE_URL` deve apontar para a URL pública real do projeto, não para localhost.
+### `npm run setup`
 
-## Correções já aplicadas e guardadas como contexto
+O setup é idempotente, cross-platform e não pode depender de caminhos absolutos da máquina.
 
-O usuário já pediu e validou as seguintes melhorias:
-- frontend em React + Vite + TypeScript + Tailwind + SCSS
-- scripts e setup raiz para iniciar sem depender de passos manuais
-- docker e .gitignore e .env ajustados
-- documentação detalhada em docs/
-- correção de inputs sem estilo
-- restauração de páginas e fluxos de canais/usuarios/configurações
-- ajuste de listagem e criação de playlist com nome personalizado
-- correção de PATH/npm no modo dev (`ENOENT` resolvido com uso de npm_execpath / npm.cmd)
-- histórico do GitHub reescrito e publicado novamente sem `.env`, banco SQLite, `input/`, `output/`, `logs/` e `src/__pycache__/`
-- proteção adicionada para impedir sincronizações concorrentes e tratar falta de espaço em disco sem derrubar a thread do pipeline
-- verificação automática periódica da saúde dos canais existentes, atualizando online/offline, latência, HTTP e `last_checked` sem regenerar playlists
-- página de canais com seleção persistente de colunas, ordenação alternável por cabeçalho, filtros dinâmicos de país/estado/cidade/categoria/status e upload local de logos
+1. verifica Node.js;
+2. localiza Python 3 (`py`/`python` no Windows; `python3`/`python` em Unix);
+3. cria `.venv` na raiz quando necessário;
+4. instala `requirements.txt` no `.venv`;
+5. cria `.env` a partir de `.env.example` quando necessário;
+6. usa `npm ci` se `frontend/react/package-lock.json` existir, caso contrário usa `npm install`;
+7. executa o build React;
+8. confirma `frontend/react/dist/index.html`.
 
-## Troubleshooting
+O `setup.js` **não chama `main()` inexistente** e **não chama `installFrontendDeps()` recursivamente**.
 
-### Erro `spawn npm ENOENT`
+### Desenvolvimento
 
-Causa: processo filho sem PATH correto em Git Bash / VS Code. Solução: usar `process.env.npm_execpath` ou `npm.cmd`/`npm` explicitamente.
+`npm run dev` usa sempre o Python de:
 
-### Frontend não renderiza
+- Windows: `.venv\\Scripts\\python.exe`
+- Linux/macOS: `.venv/bin/python`
 
-Verificar:
-- `npm --prefix frontend/react run build`
-- existencia de `frontend/react/dist/index.html`
+O caminho é calculado relativo à raiz do projeto. Nunca usar caminhos como `C:\\www\\...` ou `/usr/bin/...`.
 
-### Login ou senha não funcionam
+São iniciados backend Flask, servidor público e Vite. Se o ambiente estiver incompleto, o setup é executado antes do início.
 
-Credenciais padrão:
-- admin / admin123
+### Produção
 
-Se necessário, resetar via SQLite.
+`npm run start` valida `.venv` e `frontend/react/dist/index.html` antes de iniciar backend e servidor público.
 
-### .env ausente
+## Validação
 
-Usar:
-- cp .env.example .env
-ou:
-- copy .env.example .env
+- `npm run test` — testes Python.
+- `npm run typecheck` — build TypeScript/Vite.
+- `npm run verify` — sintaxe Python, testes, build React e arquivos obrigatórios.
 
-## Documentação do projeto
+## Ambiente
 
-- README.md — guia inicial
-- docs/arquitetura.md — arquitetura
-- docs/instalacao.md — instalação
-- docs/configuracao.md — configuração
-- docs/troubleshooting.md — problemas comuns
-- docs/acesso-e-recuperacao.md — senhas e recuperação de acesso
-- docs/direitos-e-doacoes.md — autoria, licença, créditos e doações
-- docs/configuracao.md — configuração do sistema e saúde automática dos canais
+Variáveis principais:
 
-## Regras para agentes e chats
+- `BASE_URL`
+- `PUBLIC_BASE_URL`
+- `WEB_HOST`
+- `WEB_PORT`
+- `PUBLIC_HOST`
+- `PUBLIC_PORT`
+- `MAX_CHANNELS_PER_FILE`
+- `CONCURRENCY_LIMIT`
+- `REQUEST_TIMEOUT`
+- `USER_AGENT`
+- `REMOTE_M3U_URLS`
+- `SCHEDULE_MODE`
+- `SCHEDULE_INTERVAL_HOURS`
+- `SCHEDULE_CRON_TIME`
+- `HEALTH_CHECK_INTERVAL_SECONDS`
+- `API_TOKEN`
+- `SECRET_KEY`
 
-- Não recomeçar do zero o contexto do projeto.
-- Preservar os padrões já validados: Flask + React + SQLite + root scripts + documentação.
-- Sempre que uma alteração relevante for feita em setup, Docker, .env, .gitignore, .sh, .bat, .md ou txt, atualizar os arquivos correspondentes e manter consistência.
-- Quando o usuário pedir ajustes no frontend, manter a lógica do backend e os endpoints compatíveis.
-- Quando o usuário pedir nomear, editar ou gerar listas, priorizar a lógica de nome e link público sem quebrar `BASE_URL`.
-- O menu roda em `WEB_PORT`/`BASE_URL`; playlists e EPG rodam em servidor separado usando `PUBLIC_PORT`/`PUBLIC_BASE_URL`.
-- O servidor público deve aceitar somente `/playlist/...` e `/epg/...`, sem expor menu ou APIs.
-- Alterações de `WEB_PORT` ou `PUBLIC_PORT` exigem reiniciar os processos ou os serviços Docker.
-- Alterações no projeto devem preservar os créditos de DeldMi, o arquivo LICENSE e o arquivo NOTICE.
-- Componentes de terceiros devem manter suas próprias licenças e créditos.
-- `.gitignore` deve manter fora do Git `.env`, bancos SQLite, logs, `output`, `dist`, `node_modules`, ambientes virtuais e caches Python.
-- Arquivos locais que já tenham sido rastreados devem ser removidos do índice com `git rm --cached`, sem apagar suas cópias de trabalho.
+## Autenticação
 
-### Histórico Git e arquivos sensíveis
+Banco novo cria, conforme a documentação atual:
 
-O histórico remoto foi limpo em 2026-09-15 com reescrita da branch `main` e force-push protegido por `--force-with-lease`.
-Os arquivos locais foram preservados, mas não devem ser adicionados ao Git.
+- `admin / admin123`
 
-Se um segredo voltar a ser publicado, revogue ou troque o segredo primeiro e só depois limpe o histórico. Para conferir arquivos ignorados que ainda estejam rastreados:
+Roles:
+
+- `admin` — administração, usuários e configurações.
+- `editor` — canais, sincronização e geração.
+- `viewer` — leitura/consumo.
+
+## Compatibilidade e segurança
+
+- Não remover endpoints existentes sem migração documentada.
+- Preservar Flask + React + SQLite + scripts de raiz.
+- Preservar `LICENSE`, `NOTICE` e créditos de DeldMi.
+- Componentes de terceiros mantêm suas licenças/créditos.
+- `.env`, bancos SQLite, logs, `output`, `dist`, `node_modules`, `.venv` e caches Python não devem entrar no Git.
+- Nunca gravar caminhos absolutos da máquina nos scripts.
+- O servidor público não pode expor menu ou APIs.
+
+## Histórico Git
+
+O histórico remoto foi limpo em 2026-09-15. Se um segredo voltar a ser publicado, revogar/trocar o segredo primeiro e somente depois limpar o histórico.
 
 ```bash
 git ls-files -ci --exclude-standard
-```
-
-Para remover um arquivo local do índice sem apagá-lo do computador:
-
-```bash
 git rm --cached -- caminho/do/arquivo
 ```
 
-Depois de uma limpeza histórica, o GitHub pode manter objetos antigos temporariamente em caches internos; dados realmente secretos podem exigir solicitação ao suporte do GitHub.
+## Problemas corrigidos nesta versão
 
-### Erro `database or disk is full` ou `No space left on device`
+- `npm ci` sem lockfile: frontend possui lockfile e o setup tem fallback para `npm install`.
+- `main is not defined`: corrigido em `scripts/setup.js`.
+- Recursão de `installFrontendDeps()`: removida.
+- `/usr/bin\\python.exe`: removido; scripts usam `.venv` relativo à raiz.
+- `.venv` em outro diretório: não é mais aceito pelo setup/runtime.
+- `spawn npm ENOENT`: npm usa `npm_execpath` quando disponível e `npm.cmd` no Windows.
+- `run-prod.js`: valida ambiente e encerra processos irmãos de forma controlada.
 
-Causa: a unidade que contém o projeto está sem espaço para o SQLite, arquivos temporários ou logs. Libere espaço no disco e reinicie o backend antes de executar nova sincronização. O endpoint de sincronização bloqueia novas execuções quando há menos de 512 MB livres.
+## Prioridades
 
-## Resumo do que o usuário prioriza
-
-- app funcionando localmente em Windows e Linux
-- root package.json para iniciar tudo em um comando
-- ambiente consistente em Docker e local
-- documentação completa que possa ser consultada sem repetir contexto
-- UI visualmente coerente e funcional
-- geração de playlists com nome e edição
-- sem perda de funcionalidade entre Flask e React
-
-## Dica final
-
-Se qualquer IA ou outro chat precisar entender o projeto rapidamente, deve começar por:
-1. ler este arquivo AGENTS.md
-2. ler README.md
-3. revisar o stack e scripts de raiz
-4. verificar docs/ e os endpoints relevantes
-5. seguir as convenções de uso do usuário: root command-first, UI consistente, listas com nome e link público
-
-## Organização semântica atualizada
-
-O projeto passou a ser organizado gradualmente por domínio para reduzir acoplamento sem quebrar as rotas existentes.
-
-Backend novo:
-- `src/core/scheduler.py` — configuração central do APScheduler
-- `src/domains/health/internet.py` — teste de internet/ping
-- `src/domains/playlists/service.py` — manifests e publicação
-- `src/domains/sync/service.py` — execução do pipeline e saúde automática dos canais
-
-Frontend novo:
-- `frontend/react/src/app/App.tsx` — composição da SPA
-- `frontend/react/src/components/Common.tsx` — componentes compartilhados
-- `frontend/react/src/features/dashboard/` — Painel Geral
-- `frontend/react/src/features/channels/` — Canais e editor
-- `frontend/react/src/features/playlists/` — Listas publicadas
-- `frontend/react/src/features/settings/` — Configurações
-- `frontend/react/src/features/users/` — Usuários
-- `frontend/react/src/features/player/` — player HLS
-- `frontend/react/src/services/api.ts` — cliente HTTP central
-- `frontend/react/src/types/` — contratos TypeScript
-- `frontend/react/src/main.tsx` — entrypoint mínimo
-
-Automação:
-- `npm run test` — testes Python
-- `npm run typecheck` — build TypeScript/Vite
-- `npm run verify` — verificação completa do projeto
-
-Regra de migração: novas funcionalidades devem ser colocadas no domínio correspondente, evitando aumentar `app.py` ou `main.tsx` com lógica de negócio.
+1. Instalação reproduzível.
+2. Execução confiável em Windows e Linux.
+3. Compatibilidade Flask/React.
+4. Segurança e preservação de segredos.
+5. UI coerente e funcional.
+6. Playlists/EPG com nome personalizado.
+7. Monitoramento de Internet e canais.
+8. Organização semântica e documentação atualizada.

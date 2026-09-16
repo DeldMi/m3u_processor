@@ -11,10 +11,9 @@ function getVenvPython() {
         : path.join(rootDir, '.venv', 'bin', 'python');
 }
 
-function getNpmCommand() {
-    // npm.cmd é um wrapper do Windows. Executá-lo por shell evita EINVAL em
-    // instalações nas quais spawn() não consegue iniciar arquivos .cmd.
-    return isWin ? 'npm.cmd' : 'npm';
+function getSystemCommand(name) {
+    if (!isWin) return name;
+    return name === 'npm' ? 'npm.cmd' : name;
 }
 
 function ensureEnvFile() {
@@ -36,50 +35,66 @@ function isPythonHealthy(python) {
     return !result.error && result.status === 0;
 }
 
+function hasFrontendDependencies() {
+    const frontend = path.join(rootDir, 'frontend', 'react', 'node_modules');
+    const binary = path.join(frontend, '.bin', isWin ? 'vite.cmd' : 'vite');
+    const tsc = path.join(frontend, '.bin', isWin ? 'tsc.cmd' : 'tsc');
+    return fs.existsSync(binary) && fs.existsSync(tsc);
+}
+
 function runSetup() {
-    const npm = getNpmCommand();
-    const result = spawnSync(npm, ['run', 'setup'], {
-        cwd: rootDir,
-        stdio: 'inherit',
-        shell: isWin,
-        env: process.env,
-    });
+    const result = isWin
+        ? spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', 'npm run setup'], {
+            cwd: rootDir,
+            stdio: 'inherit',
+            shell: false,
+            env: process.env,
+        })
+        : spawnSync('npm', ['run', 'setup'], {
+            cwd: rootDir,
+            stdio: 'inherit',
+            shell: false,
+            env: process.env,
+        });
     if (result.error) throw result.error;
-    if (result.status !== 0) {
-        throw new Error(`Setup terminou com código ${result.status}.`);
-    }
+    if (result.status !== 0) throw new Error(`Setup terminou com código ${result.status}.`);
 }
 
 function ensureSetup() {
     const python = getVenvPython();
     const distIndex = path.join(rootDir, 'frontend', 'react', 'dist', 'index.html');
 
-    // Um venv pode existir fisicamente e ainda ser inválido porque foi criado
-    // em outra pasta. O setup detecta e recria esse ambiente automaticamente.
-    if (!isPythonHealthy(python) || !fs.existsSync(distIndex)) {
-        console.log('[INFO] Ambiente incompleto ou virtualenv inválido. Executando npm run setup...');
+    if (!isPythonHealthy(python) || !fs.existsSync(distIndex) || !hasFrontendDependencies()) {
+        console.log('[INFO] Ambiente incompleto ou dependências do frontend ausentes. Executando npm run setup...');
         runSetup();
     }
 
-    if (!isPythonHealthy(python)) {
-        throw new Error(`Python virtualenv inválido: ${python}`);
-    }
-    if (!fs.existsSync(distIndex)) {
-        throw new Error('Build React ausente: frontend/react/dist/index.html.');
-    }
+    if (!isPythonHealthy(python)) throw new Error(`Python virtualenv inválido: ${python}`);
+    if (!hasFrontendDependencies()) throw new Error('Dependências React ausentes. Execute `npm run setup`.');
+    if (!fs.existsSync(distIndex)) throw new Error('Build React ausente: frontend/react/dist/index.html.');
 }
 
-function spawnProcess(command, args, extraEnv = {}, options = {}) {
+function spawnProcess(command, args, extraEnv = {}) {
     return spawn(command, args, {
         cwd: rootDir,
         stdio: 'inherit',
-        shell: options.shell ?? false,
+        shell: false,
         env: { ...process.env, ...extraEnv },
     });
 }
 
 function spawnNpm(args) {
-    return spawnProcess(getNpmCommand(), args, {}, { shell: isWin });
+    if (!isWin) return spawnProcess('npm', args);
+
+    return spawnProcess(
+        process.env.ComSpec || 'cmd.exe',
+        ['/d', '/s', '/c', ['npm', ...args.map((arg) => quoteCmdArg(String(arg)))].join(' ')],
+    );
+}
+
+function quoteCmdArg(value) {
+    if (/^[A-Za-z0-9_./:=@%+,-]+$/.test(value)) return value;
+    return `"${value.replace(/"/g, '\\"')}"`;
 }
 
 function main() {

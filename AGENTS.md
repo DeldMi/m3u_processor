@@ -202,6 +202,7 @@ O usuário já pediu e validou as seguintes melhorias:
 - histórico do GitHub reescrito e publicado novamente sem `.env`, banco SQLite, `input/`, `output/`, `logs/` e `src/__pycache__/`
 - proteção adicionada para impedir sincronizações concorrentes e tratar falta de espaço em disco sem derrubar a thread do pipeline
 - verificação automática periódica da saúde dos canais existentes, atualizando online/offline, latência, HTTP e `last_checked` sem regenerar playlists
+- página de canais com seleção persistente de colunas, ordenação alternável por cabeçalho, filtros dinâmicos de país/estado/cidade/categoria/status e upload local de logos
 
 ## Troubleshooting
 

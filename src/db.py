@@ -183,13 +183,23 @@ class Database:
             query += " AND (name LIKE ? OR url LIKE ? OR tvg_id LIKE ? OR group_title LIKE ? OR country LIKE ? OR state LIKE ? OR city LIKE ?)"
             params.extend([term] * 7)
 
-        sort_columns = {"id", "name", "country", "state", "city", "category", "status", "latency_ms", "last_checked"}
+        sort_columns = {"id", "name", "country", "state", "city", "category", "status", "group_title", "tvg_id", "latency_ms", "last_checked"}
         safe_sort = sort if sort in sort_columns else "id"
         safe_direction = "DESC" if direction.lower() == "desc" else "ASC"
 
         query += f" ORDER BY {safe_sort} {safe_direction};"
         with self.get_connection() as conn:
             return [dict(row) for row in conn.execute(query, params).fetchall()]
+
+    def channel_filter_options(self) -> Dict[str, List[str]]:
+        with self.get_connection() as conn:
+            result = {}
+            for field in ("country", "state", "city", "category", "status"):
+                rows = conn.execute(
+                    f"SELECT DISTINCT {field} FROM channels WHERE {field} IS NOT NULL AND TRIM({field}) != '' ORDER BY {field} COLLATE NOCASE"
+                ).fetchall()
+                result[field] = [str(row[0]) for row in rows]
+            return result
 
     def update_channel(self, channel_id: int, values: Dict[str, Any]) -> bool:
         allowed = {"url", "name", "tvg_id", "logo", "group_title", "country", "state", "city", "category", "status", "auto_remove_if_offline", "metadata"}

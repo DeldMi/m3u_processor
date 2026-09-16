@@ -70,6 +70,8 @@ type Status = {
     logs: { timestamp: string; level: string; message: string }[];
     log_count: number;
 };
+type ChannelOptions = { country: string[]; state: string[]; city: string[]; category: string[]; status: string[] };
+type ChannelColumn = "status" | "id" | "logo" | "name" | "country" | "state" | "city" | "playlist" | "group_title" | "xmltv_file" | "tvg_id" | "latency_ms" | "auto_remove" | "actions";
 
 const api = async <T,>(url: string, options?: RequestInit) => {
     const response = await fetch(url, options);
@@ -456,6 +458,7 @@ function Channels({ user }: { user: User }) {
     const [query, setQuery] = useState({
         search: "",
         country: "todos",
+        city: "todos",
         category: "todos",
         status: "todos",
         sort: "id",
@@ -466,6 +469,11 @@ function Channels({ user }: { user: User }) {
     const [selected, setSelected] = useState<number[]>([]);
     const [editing, setEditing] = useState<Channel | null>(null);
     const [builder, setBuilder] = useState(false);
+    const [options, setOptions] = useState<ChannelOptions>({ country: [], state: [], city: [], category: [], status: [] });
+    const [columnsOpen, setColumnsOpen] = useState(false);
+    const [columns, setColumns] = useState<ChannelColumn[]>(() => {
+        try { return JSON.parse(localStorage.getItem("channel-columns") || "null") || ["status", "id", "logo", "name", "country", "city", "group_title", "tvg_id", "latency_ms", "actions"]; } catch { return ["status", "id", "logo", "name", "country", "city", "group_title", "tvg_id", "latency_ms", "actions"]; }
+    });
     const load = () =>
         api<Channel[]>(`/api/v1/channels?${new URLSearchParams(query)}`)
             .then((d) => {
@@ -480,11 +488,14 @@ function Channels({ user }: { user: User }) {
     }, [
         query.search,
         query.country,
+        query.city,
         query.category,
         query.status,
         query.sort,
         query.direction,
     ]);
+    useEffect(() => { api<ChannelOptions>("/api/v1/channels/options").then(setOptions).catch(() => undefined); }, [channels]);
+    useEffect(() => { localStorage.setItem("channel-columns", JSON.stringify(columns)); }, [columns]);
     const totalPages = Math.max(1, Math.ceil(channels.length / pageSize));
     const visible = channels.slice((page - 1) * pageSize, page * pageSize);
     const all =
@@ -497,6 +508,10 @@ function Channels({ user }: { user: User }) {
         }).then(load);
     const updateQuery = (key: keyof typeof query, value: string) =>
         setQuery({ ...query, [key]: value });
+    const sortBy = (field: string) => setQuery({ ...query, sort: field, direction: query.sort === field && query.direction === "asc" ? "desc" : "asc" });
+    const toggleColumn = (column: ChannelColumn) => setColumns(columns.includes(column) ? columns.filter((item) => item !== column) : [...columns, column]);
+    const columnLabels: Record<ChannelColumn, string> = { status: "Status", id: "Ch. No.", logo: "Logo", name: "Channel Name", country: "País", state: "Estado", city: "Cidade", playlist: "Playlist", group_title: "Group Title", xmltv_file: "XMLTV File", tvg_id: "XMLTV ID", latency_ms: "Latência", auto_remove: "Remover OFF", actions: "Ações" };
+    const header = (column: ChannelColumn) => <button className="table-sort" onClick={() => sortBy(column)}>{columnLabels[column]} {query.sort === column ? (query.direction === "asc" ? "↑" : "↓") : "↕"}</button>;
     return (
         <>
             <Header
@@ -518,51 +533,23 @@ function Channels({ user }: { user: User }) {
                             onChange={(e) => updateQuery("search", e.target.value)}
                         />
                     </div>
-                    <select
-                        value={query.country}
-                        onChange={(e) => updateQuery("country", e.target.value)}
-                    >
-                        <option value="todos">Todos os países</option>
-                        <option>Brasil</option>
-                        <option>Portugal</option>
-                        <option>Estados Unidos</option>
-                    </select>
+                    <select value={query.country} onChange={(e) => updateQuery("country", e.target.value)}><option value="todos">Todos os países</option>{options.country.map((value) => <option key={value}>{value}</option>)}</select>
+                    <select value={query.city} onChange={(e) => updateQuery("city" as keyof typeof query, e.target.value)}><option value="todos">Todas as cidades</option>{options.city.map((value) => <option key={value}>{value}</option>)}</select>
                     <select
                         value={query.category}
                         onChange={(e) => updateQuery("category", e.target.value)}
                     >
                         <option value="todos">Todas as categorias</option>
-                        <option value="tv">TV</option>
-                        <option value="vod">VOD</option>
-                        <option value="series">Séries</option>
-                        <option value="radio">Rádio</option>
+                        {options.category.map((value) => <option key={value}>{value}</option>)}
                     </select>
                     <select
                         value={query.status}
                         onChange={(e) => updateQuery("status", e.target.value)}
                     >
                         <option value="todos">Todos os status</option>
-                        <option value="online">Apenas online</option>
-                        <option value="offline">Apenas offline</option>
+                        {options.status.map((value) => <option key={value} value={value}>{value === "online" ? "Apenas online" : value === "offline" ? "Apenas offline" : value}</option>)}
                     </select>
-                    <select
-                        value={query.sort}
-                        onChange={(e) => updateQuery("sort", e.target.value)}
-                    >
-                        <option value="id">Ordenar por inclusão</option>
-                        <option value="name">Nome</option>
-                        <option value="country">País</option>
-                        <option value="category">Categoria</option>
-                        <option value="status">Status</option>
-                        <option value="latency_ms">Latência</option>
-                    </select>
-                    <select
-                        value={query.direction}
-                        onChange={(e) => updateQuery("direction", e.target.value)}
-                    >
-                        <option value="asc">Crescente</option>
-                        <option value="desc">Decrescente</option>
-                    </select>
+                    <div className="column-picker"><button className="button subtle" onClick={() => setColumnsOpen(!columnsOpen)}>Colunas</button>{columnsOpen && <div className="column-picker-menu">{(Object.keys(columnLabels) as ChannelColumn[]).map((column) => <label key={column}><input type="checkbox" checked={columns.includes(column)} onChange={() => toggleColumn(column)} /> {columnLabels[column]}</label>)}</div>}</div>
                 </div>
                 <div className="editor-actions">
                     <label>
@@ -635,100 +622,27 @@ function Channels({ user }: { user: User }) {
                                         }
                                     />
                                 </th>
-                                <th>Status</th>
-                                <th>Ch. No.</th>
-                                <th>Logo</th>
-                                <th>Channel Name</th>
-                                <th>Playlist</th>
-                                <th>Group Title</th>
-                                <th>XMLTV File</th>
-                                <th>XMLTV ID</th>
-                                <th>Latência</th>
-                                <th>Remover OFF</th>
-                                <th>Ações</th>
+                                {columns.map((column) => <th key={column}>{column === "actions" ? columnLabels[column] : header(column)}</th>)}
                             </tr>
                         </thead>
                         <tbody>
                             {visible.map((c) => (
                                 <tr key={c.id}>
-                                    <td>
-                                        <input
-                                            type="checkbox"
-                                            checked={selected.includes(c.id)}
-                                            onChange={(e) =>
-                                                setSelected(
-                                                    e.target.checked
-                                                        ? [...selected, c.id]
-                                                        : selected.filter((id) => id !== c.id),
-                                                )
-                                            }
-                                        />
-                                    </td>
-                                    <td>
-                                        <button
-                                            className={`status-dot ${c.status}`}
-                                            disabled={!canEdit(user)}
-                                            onClick={() =>
-                                                patch(`/api/v1/channels/${c.id}/status`, {
-                                                    status: c.status === "online" ? "offline" : "online",
-                                                })
-                                            }
-                                        />
-                                    </td>
-                                    <td>{c.id}</td>
-                                    <td>
-                                        <span className="channel-logo">
-                                            {c.logo ? (
-                                                <img
-                                                    src={c.logo}
-                                                    onError={(e) => {
-                                                        e.currentTarget.style.display = "none";
-                                                    }}
-                                                />
-                                            ) : (
-                                                <Wifi size={14} />
-                                            )}
-                                        </span>
-                                    </td>
-                                    <td className="channel-name"><b>{c.name}</b></td>
-                                    <td>{c.playlist || "-"}</td>
-                                    <td>{c.group_title || "-"}</td>
-                                    <td>{c.xmltv_file || "-"}</td>
-                                    <td>{c.tvg_id || "-"}</td>
-                                    <td>{c.latency_ms || 0} ms</td>
-                                    <td>
-                                        <input
-                                            type="checkbox"
-                                            checked={Boolean(c.auto_remove_if_offline)}
-                                            disabled={!canEdit(user)}
-                                            onChange={(e) =>
-                                                patch(`/api/v1/channels/${c.id}/autoremove`, {
-                                                    auto_remove_if_offline: e.target.checked ? 1 : 0,
-                                                })
-                                            }
-                                        />
-                                    </td>
-                                    <td>
-                                        {canEdit(user) && (
-                                            <button
-                                                className="text-button"
-                                                onClick={() => setEditing(c)}
-                                            >
-                                                Editar
-                                            </button>
-                                        )}
-                                        <button
-                                            className="icon-button"
-                                            title="Assistir"
-                                            onClick={() =>
-                                                dispatchEvent(
-                                                    new CustomEvent("play-channel", { detail: c }),
-                                                )
-                                            }
-                                        >
-                                            <Play size={14} />
-                                        </button>
-                                    </td>
+                                    <td><input type="checkbox" checked={selected.includes(c.id)} onChange={(e) => setSelected(e.target.checked ? [...selected, c.id] : selected.filter((id) => id !== c.id))} /></td>
+                                    {columns.includes("status") && <td><button className={`status-dot ${c.status}`} disabled={!canEdit(user)} onClick={() => patch(`/api/v1/channels/${c.id}/status`, { status: c.status === "online" ? "offline" : "online" })} /></td>}
+                                    {columns.includes("id") && <td>{c.id}</td>}
+                                    {columns.includes("logo") && <td><span className="channel-logo">{c.logo ? <img src={c.logo} onError={(e) => { e.currentTarget.style.display = "none"; }} /> : <Wifi size={14} />}</span></td>}
+                                    {columns.includes("name") && <td className="channel-name"><b>{c.name}</b></td>}
+                                    {columns.includes("country") && <td>{c.country || "-"}</td>}
+                                    {columns.includes("state") && <td>{c.state || "-"}</td>}
+                                    {columns.includes("city") && <td>{c.city || "-"}</td>}
+                                    {columns.includes("playlist") && <td>{c.playlist || "-"}</td>}
+                                    {columns.includes("group_title") && <td>{c.group_title || "-"}</td>}
+                                    {columns.includes("xmltv_file") && <td>{c.xmltv_file || "-"}</td>}
+                                    {columns.includes("tvg_id") && <td>{c.tvg_id || "-"}</td>}
+                                    {columns.includes("latency_ms") && <td>{c.latency_ms || 0} ms</td>}
+                                    {columns.includes("auto_remove") && <td><input type="checkbox" checked={Boolean(c.auto_remove_if_offline)} disabled={!canEdit(user)} onChange={(e) => patch(`/api/v1/channels/${c.id}/autoremove`, { auto_remove_if_offline: e.target.checked ? 1 : 0 })} /></td>}
+                                    {columns.includes("actions") && <td>{canEdit(user) && <button className="text-button" onClick={() => setEditing(c)}>Editar</button>}<button className="icon-button" title="Assistir" onClick={() => dispatchEvent(new CustomEvent("play-channel", { detail: c }))}><Play size={14} /></button></td>}
                                 </tr>
                             ))}
                         </tbody>
@@ -763,6 +677,7 @@ function ChannelEditor({
     saved: () => void;
 }) {
     const [form, setForm] = useState(channel);
+    const [uploading, setUploading] = useState(false);
     const set = (key: keyof Channel, value: string | number) =>
         setForm({ ...form, [key]: value });
     const submit = (e: React.FormEvent) => {
@@ -775,6 +690,16 @@ function ChannelEditor({
             .then(saved)
             .catch(() => alert("Não foi possível salvar o canal."));
     };
+    const uploadLogo = (file: File) => {
+        const body = new FormData();
+        body.append("image", file);
+        setUploading(true);
+        fetch("/api/v1/channels/logo", { method: "POST", body })
+            .then((response) => { if (!response.ok) throw new Error("upload"); return response.json() as Promise<{ url: string }>; })
+            .then((result) => set("logo", result.url))
+            .catch(() => alert("Não foi possível enviar a imagem."))
+            .finally(() => setUploading(false));
+    };
     return (
         <Modal title="Editar canal completo" close={close}>
             <form className="edit-form" onSubmit={submit}>
@@ -783,7 +708,6 @@ function ChannelEditor({
                         [
                             "name",
                             "url",
-                            "logo",
                             "tvg_id",
                             "group_title",
                             "country",
@@ -800,6 +724,8 @@ function ChannelEditor({
                             />
                         </label>
                     ))}
+                    <label>Logo por URL<input value={String(form.logo || "")} onChange={(e) => set("logo", e.target.value)} placeholder="https://..." /></label>
+                    <label>Enviar logo do computador<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={uploading} onChange={(e) => e.target.files?.[0] && uploadLogo(e.target.files[0])} /></label>
                 </div>
                 <label>
                     Categoria

@@ -7,6 +7,7 @@ import re
 import shutil
 import sqlite3
 import sys
+from werkzeug.utils import secure_filename
 from collections import deque
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request, redirect, url_for, send_from_directory, send_file
@@ -405,9 +406,34 @@ def api_rename_playlist(m3u_name):
 @require_role("viewer")
 def api_get_channels():
     country = request.args.get("country")
+    city = request.args.get("city")
     category = request.args.get("category")
     status = request.args.get("status")
-    return jsonify(manager.db.list_channels(country, category, status, request.args.get("search", ""), request.args.get("sort", "id"), request.args.get("direction", "asc")))
+    channels = manager.db.list_channels(country, category, status, request.args.get("search", ""), request.args.get("sort", "id"), request.args.get("direction", "asc"))
+    if city and city != "todos":
+        channels = [channel for channel in channels if channel.get("city") == city]
+    return jsonify(channels)
+
+@app.route("/api/v1/channels/options")
+@require_role("viewer")
+def api_channel_options():
+    return jsonify(manager.db.channel_filter_options())
+
+@app.route("/api/v1/channels/logo", methods=["POST"])
+@require_role("editor")
+def api_upload_channel_logo():
+    image = request.files.get("image")
+    if not image or not image.filename:
+        return jsonify({"error": "Nenhuma imagem foi enviada"}), 400
+    allowed = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+    extension = os.path.splitext(image.filename)[1].lower()
+    if extension not in allowed:
+        return jsonify({"error": "Formato de imagem não permitido"}), 400
+    upload_dir = os.path.join(BASE_DIR, "frontend", "static", "uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+    filename = f"channel_{int(time.time() * 1000)}_{secure_filename(image.filename)}"
+    image.save(os.path.join(upload_dir, filename))
+    return jsonify({"url": f"/static/uploads/{filename}"})
 
 @app.route("/api/v1/users", methods=["GET", "POST"])
 @require_role("admin")

@@ -247,6 +247,8 @@ ou:
 - Alterações de `WEB_PORT` ou `PUBLIC_PORT` exigem reiniciar os processos ou os serviços Docker.
 - Alterações no projeto devem preservar os créditos de DeldMi, o arquivo LICENSE e o arquivo NOTICE.
 - Componentes de terceiros devem manter suas próprias licenças e créditos.
+- `.gitignore` deve manter fora do Git `.env`, bancos SQLite, logs, `output`, `dist`, `node_modules`, ambientes virtuais e caches Python.
+- Arquivos locais que já tenham sido rastreados devem ser removidos do índice com `git rm --cached`, sem apagar suas cópias de trabalho.
 
 ## Resumo do que o usuário prioriza
 

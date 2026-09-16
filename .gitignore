@@ -34,7 +34,6 @@ pnpm-debug.log*
 # ==============================================================================
 .env
 !.env.example
-!.env.*
 
 # ==============================================================================
 # Diretorios de Dados e Resultados (Ignora o conteudo, preserva a pasta)
@@ -45,6 +44,14 @@ output/*
 !output/.gitkeep
 logs/*
 !logs/.gitkeep
+data/*
+!data/.gitkeep
+
+# Bancos locais e arquivos auxiliares do SQLite
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
 
 # ==============================================================================
 # Logs do Sistema Operacional e Runtime
@@ -69,5 +76,3 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 .DS_Store
-
-*db

@@ -46,31 +46,25 @@ if (!fs.existsSync(path.join(FRONTEND, 'package.json'))) {
     process.exit(1);
 }
 
-// Cloudflare pode executar `bun install` na raiz antes deste script. O workspace
-// declarado no package.json permite que Bun instale o frontend; ainda assim,
-// verificamos a ferramenta real necessária para evitar depender apenas da
-// existência do diretório node_modules.
-const frontendLock = path.join(FRONTEND, 'package-lock.json');
+// Cloudflare pode executar `bun install` na raiz antes deste script. Mesmo com
+// o workspace declarado, a plataforma pode não materializar as dependências
+// no diretório esperado pelo npm. Por isso, a presença real do TypeScript é a
+// condição de prontidão do frontend.
 const tsc = frontendTool('tsc');
 
 if (!fs.existsSync(tsc)) {
     console.log('[INFO] Dependências do frontend não estão prontas. Instalando agora...');
 
-    if (fs.existsSync(frontendLock)) {
-        run(
-            npmCommand,
-            ['ci', '--no-audit', '--no-fund'],
-            'Instalar dependências do frontend',
-            FRONTEND,
-        );
-    } else {
-        run(
-            npmCommand,
-            ['install', '--no-audit', '--no-fund'],
-            'Instalar dependências do frontend',
-            FRONTEND,
-        );
-    }
+    // Use `npm install`, e não `npm ci`, como fallback de build. O ambiente do
+    // Cloudflare pode remover/ignorar lockfiles durante a etapa automática de
+    // instalação (especialmente quando Bun é o gerenciador detectado). `npm
+    // install` funciona tanto com quanto sem package-lock.json.
+    run(
+        npmCommand,
+        ['install', '--no-audit', '--no-fund'],
+        'Instalar dependências do frontend',
+        FRONTEND,
+    );
 }
 
 if (!fs.existsSync(tsc)) {

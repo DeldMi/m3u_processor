@@ -11,13 +11,14 @@ const pythonCandidates = isWindows
     ? [path.join(ROOT, '.venv', 'Scripts', 'python.exe'), 'py', 'python']
     : [path.join(ROOT, '.venv', 'bin', 'python'), 'python3', 'python'];
 
-function run(command, args, label, options = {}) {
+function run(command, args, label) {
     console.log(`\n==> ${label}`);
     const result = spawnSync(command, args, {
         cwd: ROOT,
         stdio: 'inherit',
-        shell: options.shell ?? (isWindows && command === npmCommand),
-        env: { ...process.env, ...(options.env || {}) },
+        // Não usar shell=true: além de desnecessário, isso evita o DEP0190 no Node.
+        shell: false,
+        env: { ...process.env },
     });
     if (result.error) throw new Error(`${label}: ${result.error.message}`);
     if (result.status !== 0) throw new Error(`${label}: processo terminou com código ${result.status}`);
@@ -91,9 +92,7 @@ function createZip(python) {
 function main() {
     const python = findPython();
 
-    // O build raiz é deliberadamente diferente do build do frontend: ele
-    // primeiro compila o React e depois monta um pacote executável do projeto.
-    run(npmCommand, ['--prefix', 'frontend/react', 'run', 'build'], 'Build do frontend React/TypeScript', { shell: isWindows });
+    run(npmCommand, ['--prefix', 'frontend/react', 'run', 'build'], 'Build do frontend React/TypeScript');
     run(python, ['-m', 'compileall', '-q', 'src', 'tests'], 'Validação/compilação Python');
     collectProject();
     const zipPath = createZip(python);

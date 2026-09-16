@@ -1,22 +1,24 @@
 export async function onRequest(context) {
-    const backendOrigin = context.env.BACKEND_ORIGIN;
+    const incoming = new URL(context.request.url);
+    const pathname = incoming.pathname;
+    const backendPaths = pathname.startsWith('/api/') ||
+        pathname === '/login' ||
+        pathname === '/logout' ||
+        pathname.startsWith('/playlist/') ||
+        pathname.startsWith('/epg/');
 
-    // Sem backend configurado, páginas estáticas continuam funcionando; APIs
-    // retornam erro explícito em vez de vazar detalhes de configuração.
+    if (!backendPaths) return context.next();
+
+    const backendOrigin = context.env.BACKEND_ORIGIN;
     if (!backendOrigin) {
-        const pathname = new URL(context.request.url).pathname;
-        if (pathname.startsWith('/api/') || pathname === '/login' || pathname === '/logout') {
-            return new Response(JSON.stringify({ error: 'BACKEND_ORIGIN não configurado.' }), {
-                status: 503,
-                headers: { 'content-type': 'application/json; charset=utf-8' },
-            });
-        }
-        return context.next();
+        return new Response(JSON.stringify({ error: 'BACKEND_ORIGIN não configurado no Cloudflare Pages.' }), {
+            status: 503,
+            headers: { 'content-type': 'application/json; charset=utf-8' },
+        });
     }
 
-    const incoming = new URL(context.request.url);
     const backend = new URL(backendOrigin);
-    backend.pathname = incoming.pathname;
+    backend.pathname = pathname;
     backend.search = incoming.search;
 
     const headers = new Headers(context.request.headers);

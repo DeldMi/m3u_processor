@@ -1,68 +1,45 @@
 import React, { useState } from "react";
-import { Boxes, CircleGauge, LayoutDashboard, ListVideo, LogOut, Menu, MoreVertical, Power, RotateCcw, Save, Settings, ShieldCheck, UserRound, Users, X, Zap } from "lucide-react";
+import { Boxes, LayoutDashboard, ListVideo, LogOut, Menu, MoreVertical, Power, RotateCcw, Save, Settings, ShieldCheck, UserRound, Users, X, Zap } from "lucide-react";
 import { api } from "../services/api";
-import type { User } from "../types";
-export const canEdit = (user: User) => user.role !== "viewer";
-export const nav = [ { path: "/", label: "Painel geral", icon: LayoutDashboard }, { path: "/channels", label: "Canais e editor", icon: Boxes }, { path: "/playlists", label: "Listas publicadas", icon: ListVideo }, { path: "/users", label: "Usuários", icon: Users, admin: true }, { path: "/settings", label: "Configurações", icon: Settings, admin: true } ];
+import type { PermissionAction, User } from "../types";
 
+export const hasPermission = (user: User, resource: string, action: PermissionAction) => {
+    if (user.role === "admin") return true;
+    return Boolean(user.permissions?.[resource]?.includes(action));
+};
+export const canEdit = (user: User) => hasPermission(user, "channels", "edit");
+export const nav = [
+    { path: "/", label: "Painel geral", icon: LayoutDashboard, resource: "dashboard" },
+    { path: "/channels", label: "Canais e editor", icon: Boxes, resource: "channels" },
+    { path: "/playlists", label: "Listas publicadas", icon: ListVideo, resource: "playlists" },
+    { path: "/users", label: "Usuários", icon: Users, resource: "users" },
+    { path: "/settings", label: "Configurações", icon: Settings, resource: "settings" },
+];
 
 export function Shell({ user, children }: { user: User; children: React.ReactNode }) {
-    const [collapsed, setCollapsed] = useState(
-        localStorage.getItem("sidebar-collapsed") === "true",
-    );
+    const [collapsed, setCollapsed] = useState(localStorage.getItem("sidebar-collapsed") === "true");
     const path = window.location.pathname;
     const [profileOpen, setProfileOpen] = useState(false);
     const [adminOpen, setAdminOpen] = useState(false);
     return (
         <div className={`app-shell ${collapsed ? "is-collapsed" : ""}`}>
             <aside className="sidebar">
-                <div className="brand">
-                    <span className="brand-mark">M3</span>
-                    <span className="brand-name">M3U ARCHITECT</span>
-                </div>
-                <button
-                    className="icon-button sidebar-toggle"
-                    onClick={() => {
-                        setCollapsed(!collapsed);
-                        localStorage.setItem("sidebar-collapsed", String(!collapsed));
-                    }}
-                    title="Recolher menu"
-                >
-                    <Menu size={18} />
-                </button>
+                <div className="brand"><span className="brand-mark">M3</span><span className="brand-name">M3U ARCHITECT</span></div>
+                <button className="icon-button sidebar-toggle" onClick={() => { setCollapsed(!collapsed); localStorage.setItem("sidebar-collapsed", String(!collapsed)); }} title="Recolher menu"><Menu size={18} /></button>
                 <nav>
-                    {nav
-                        .filter((n) => !n.admin || user.role === "admin")
-                        .map((n) => {
-                            const Icon = n.icon;
-                            return (
-                                <a
-                                    className={path === n.path ? "active" : ""}
-                                    href={n.path}
-                                    key={n.path}
-                                >
-                                    <Icon size={18} />
-                                    <span>{n.label}</span>
-                                </a>
-                            );
-                        })}
+                    {nav.filter((n) => hasPermission(user, n.resource, "view")).map((n) => {
+                        const Icon = n.icon;
+                        return <a className={path === n.path ? "active" : ""} href={n.path} key={n.path}><Icon size={18} /><span>{n.label}</span></a>;
+                    })}
                 </nav>
-                <a className="logout" href="/logout">
-                    <LogOut size={17} />
-                    <span>Sair</span>
-                </a>
+                <a className="logout" href="/logout"><LogOut size={17} /><span>Sair</span></a>
             </aside>
             <main className="main-content">
                 <header className="topbar">
-                    <div>
-                        <span className="kicker">CENTRO DE OPERAÇÕES</span>
-                        <p>Olá, {user.username}</p>
-                    </div>
+                    <div><span className="kicker">CENTRO DE OPERAÇÕES</span><p>Olá, {user.display_name || user.username}</p></div>
                     <div className="account-actions">
-                        <button className="account-button" onClick={() => setProfileOpen(true)} title="Editar perfil">
-                            <UserRound size={15} /> {user.username}
-                        </button>
-                        {user.role === "admin" && <div className="admin-menu-wrap">
+                        <button className="account-button" onClick={() => setProfileOpen(true)} title="Editar perfil"><UserRound size={15} /> {user.username}</button>
+                        {hasPermission(user, "system", "admin") && <div className="admin-menu-wrap">
                             <button className="icon-button" onClick={() => setAdminOpen(!adminOpen)} title="Opções administrativas"><MoreVertical size={18} /></button>
                             {adminOpen && <div className="admin-menu">
                                 <button onClick={() => api("/api/admin/restart", { method: "POST" }).then(() => setTimeout(() => window.location.reload(), 1200))}><RotateCcw size={15} /> Reiniciar servidor</button>
@@ -87,137 +64,22 @@ export function ProfileModal({ user, close }: { user: User; close: () => void })
 }
 
 export function Login() {
-    return (
-        <main className="login-screen">
-            <form className="login-card" method="post" action="/login">
-                <span className="brand-mark">M3</span>
-                <p className="kicker">M3U ARCHITECT</p>
-                <h1>Controle sua grade.</h1>
-                <p className="muted">
-                    Auditoria, conectividade e distribuição em um só lugar.
-                </p>
-                <label>
-                    Usuário
-                    <input name="username" required autoFocus />
-                </label>
-                <label>
-                    Senha
-                    <input name="password" type="password" required />
-                </label>
-                <button className="button primary full">
-                    <Zap size={16} /> Entrar no sistema
-                </button>
-            </form>
-        </main>
-    );
+    return <main className="login-screen"><form className="login-card" method="post" action="/login"><span className="brand-mark">M3</span><p className="kicker">M3U ARCHITECT</p><h1>Controle sua grade.</h1><p className="muted">Auditoria, conectividade e distribuição em um só lugar.</p><label>Usuário<input name="username" required autoFocus /></label><label>Senha<input name="password" type="password" required /></label><button className="button primary full"><Zap size={16} /> Entrar no sistema</button></form></main>;
 }
 
-export function Header({
-    kicker,
-    title,
-    description,
-    children,
-}: {
-    kicker: string;
-    title: string;
-    description: string;
-    children?: React.ReactNode;
-}) {
-    return (
-        <header className="page-heading">
-            <div>
-                <span className="kicker">{kicker}</span>
-                <h1>{title}</h1>
-                <p>{description}</p>
-            </div>
-            {children}
-        </header>
-    );
+export function Header({ kicker, title, description, children }: { kicker: string; title: string; description: string; children?: React.ReactNode }) {
+    return <header className="page-heading"><div><span className="kicker">{kicker}</span><h1>{title}</h1><p>{description}</p></div>{children}</header>;
 }
-
-export function PanelTitle({
-    kicker,
-    title,
-    badge,
-}: {
-    kicker: string;
-    title: string;
-    badge?: string;
-}) {
-    return (
-        <div className="panel-title">
-            <div>
-                <span className="kicker">{kicker}</span>
-                <h2>{title}</h2>
-            </div>
-            {badge && <span className="panel-badge">{badge}</span>}
-        </div>
-    );
+export function PanelTitle({ kicker, title, badge }: { kicker: string; title: string; badge?: string }) {
+    return <div className="panel-title"><div><span className="kicker">{kicker}</span><h2>{title}</h2></div>{badge && <span className="panel-badge">{badge}</span>}</div>;
 }
-
-export function Empty({ text }: { text: string }) {
-    return <div className="empty">{text}</div>;
+export function Empty({ text }: { text: string }) { return <div className="empty">{text}</div>; }
+export function Modal({ title, children, close }: { title: string; children: React.ReactNode; close: () => void }) {
+    return <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}><div className="modal"><button className="icon-button modal-close" onClick={close}><X size={18} /></button><h2>{title}</h2>{children}</div></div>;
 }
-
-export function Modal({
-    title,
-    children,
-    close,
-}: {
-    title: string;
-    children: React.ReactNode;
-    close: () => void;
-}) {
-    return (
-        <div
-            className="modal-backdrop"
-            onMouseDown={(e) => e.target === e.currentTarget && close()}
-        >
-            <div className="modal">
-                <button className="icon-button modal-close" onClick={close}>
-                    <X size={18} />
-                </button>
-                <h2>{title}</h2>
-                {children}
-            </div>
-        </div>
-    );
+export function Metric({ label, value, detail, tone }: { label: string; value: string | number; detail: string; tone: string }) {
+    return <article className={`metric metric-${tone}`}><span>{label}</span><strong>{value}</strong><small>{detail}</small></article>;
 }
-
-export function Metric({
-    label,
-    value,
-    detail,
-    tone,
-}: {
-    label: string;
-    value: string | number;
-    detail: string;
-    tone: string;
-}) {
-    return (
-        <article className={`metric metric-${tone}`}>
-            <span>{label}</span>
-            <strong>{value}</strong>
-            <small>{detail}</small>
-        </article>
-    );
-}
-
-export function Legend({
-    label,
-    value,
-    color,
-}: {
-    label: string;
-    value: number;
-    color: string;
-}) {
-    return (
-        <div className="legend-row">
-            <i className={`dot ${color}`} />
-            <span>{label}</span>
-            <b>{value}</b>
-        </div>
-    );
+export function Legend({ label, value, color }: { label: string; value: number; color: string }) {
+    return <div className="legend-row"><i className={`dot ${color}`} /><span>{label}</span><b>{value}</b></div>;
 }

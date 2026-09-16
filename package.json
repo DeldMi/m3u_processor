@@ -5,6 +5,9 @@
     "author": "DeldMi",
     "license": "SEE LICENSE IN LICENSE",
     "description": "Ambiente completo para executar, testar, configurar e empacotar o M3U Processor",
+    "workspaces": [
+        "frontend/react"
+    ],
     "scripts": {
         "setup": "node ./scripts/setup.js",
         "dev": "node ./scripts/run-dev.js",

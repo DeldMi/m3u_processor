@@ -6,7 +6,6 @@ segredos nunca fazem parte do payload retornado à interface.
 """
 from __future__ import annotations
 
-import os
 import sqlite3
 from typing import Any, Dict, Iterable, Optional
 from werkzeug.security import generate_password_hash
@@ -17,7 +16,6 @@ RESOURCES = (
     "settings", "users", "logs", "maintenance", "public_files", "system",
 )
 
-# Perfis-base. Overrides por usuário são aplicados depois do perfil.
 ROLE_PERMISSIONS = {
     "viewer": {
         "dashboard": {"view"}, "channels": {"view"}, "playlists": {"view"},
@@ -91,6 +89,32 @@ def permissions_for_role(role: str) -> Dict[str, set[str]]:
     return {resource: set(actions) for resource, actions in base.items()}
 
 
+def _normalise_permissions(values: Any) -> Dict[str, set[str]]:
+    """Converte o payload da matriz em um conjunto exato de permissões."""
+    result: Dict[str, set[str]] = {}
+    if not isinstance(values, dict):
+        return result
+    for resource, actions in values.items():
+        if resource not in RESOURCES or not isinstance(actions, Iterable) or isinstance(actions, (str, bytes)):
+            continue
+        valid = {str(action) for action in actions if str(action) in ACTIONS}
+        result[resource] = valid
+    return result
+
+
+def _store_exact_permissions(conn: sqlite3.Connection, user_id: int, values: Any) -> None:
+    """Persiste allow/deny explícitos para toda a matriz, eliminando herança ambígua."""
+    permissions = _normalise_permissions(values)
+    conn.execute("DELETE FROM user_permissions WHERE user_id = ?", (user_id,))
+    for resource in RESOURCES:
+        selected = permissions.get(resource, set())
+        for action in ACTIONS:
+            conn.execute(
+                "INSERT INTO user_permissions(user_id, resource, action, allowed) VALUES (?, ?, ?, ?)",
+                (user_id, resource, action, 1 if action in selected else 0),
+            )
+
+
 def get_user_permissions(db: Any, user_id: int, role: str) -> Dict[str, set[str]]:
     permissions = permissions_for_role(role)
     with db.get_connection() as conn:
@@ -150,7 +174,7 @@ def create_user(db: Any, values: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     display_name = str(values.get("display_name") or username).strip()
     if not username or not password or role not in ROLE_PERMISSIONS:
         return None
-    if len(username) < 3 or len(password) < 8:
+    if len(username) < 3 or len(password) < 8 or len(display_name) < 1:
         return None
     with db.get_connection() as conn:
         try:
@@ -168,15 +192,8 @@ def create_user(db: Any, values: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                 ),
             )
             user_id = int(cursor.lastrowid)
-            for resource, actions in (values.get("permissions") or {}).items():
-                if resource not in RESOURCES or not isinstance(actions, Iterable):
-                    continue
-                for action in actions:
-                    if action in ACTIONS:
-                        conn.execute(
-                            "INSERT OR REPLACE INTO user_permissions(user_id, resource, action, allowed) VALUES (?, ?, ?, 1)",
-                            (user_id, resource, action),
-                        )
+            if "permissions" in values:
+                _store_exact_permissions(conn, user_id, values.get("permissions"))
             conn.commit()
         except sqlite3.IntegrityError:
             return None
@@ -196,6 +213,8 @@ def update_user(db: Any, user_id: int, values: Dict[str, Any]) -> Optional[Dict[
         changes["username"] = str(changes["username"]).strip()
         if not changes["username"]:
             return None
+    if "display_name" in changes and not str(changes["display_name"]).strip():
+        return None
     if "role" in changes and changes["role"] not in ROLE_PERMISSIONS:
         return None
     if "password" in values and str(values.get("password") or ""):
@@ -216,17 +235,7 @@ def update_user(db: Any, user_id: int, values: Dict[str, Any]) -> Optional[Dict[
                 if cursor.rowcount == 0:
                     return None
             if "permissions" in values:
-                conn.execute("DELETE FROM user_permissions WHERE user_id = ?", (user_id,))
-                permissions = values.get("permissions") or {}
-                for resource, actions in permissions.items():
-                    if resource not in RESOURCES or not isinstance(actions, Iterable):
-                        continue
-                    for action in actions:
-                        if action in ACTIONS:
-                            conn.execute(
-                                "INSERT INTO user_permissions(user_id, resource, action, allowed) VALUES (?, ?, ?, 1)",
-                                (user_id, resource, action),
-                            )
+                _store_exact_permissions(conn, user_id, values.get("permissions"))
             conn.commit()
         except sqlite3.IntegrityError:
             return None

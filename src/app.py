@@ -5,6 +5,7 @@ import time
 import shutil
 import sqlite3
 import sys
+import re
 from collections import deque
 from datetime import datetime
 
@@ -20,14 +21,12 @@ from src.domains.health.internet import check_internet_health as _check_internet
 from src.domains.playlists.service import get_output_manifests as _get_output_manifests
 from src.domains.sync.service import execute_health_check as _execute_health_check
 from src.domains.sync.service import execute_pipeline as _execute_pipeline
+from src.domains.authz.service import create_user as authz_create_user, update_user as authz_update_user, list_public_users, public_user
 from src.manager import PlaylistManager
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-app = Flask(__name__, 
-            template_folder=os.path.join(BASE_DIR, "frontend", "templates"),
-            static_folder=os.path.join(BASE_DIR, "frontend", "static"))
+app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "frontend", "templates"), static_folder=os.path.join(BASE_DIR, "frontend", "static"))
 REACT_DIR = os.path.join(BASE_DIR, "frontend", "react", "dist")
-
 app.secret_key = ConfigManager(BASE_DIR).get_all().get("SECRET_KEY", "m3u_processor_secret_key_fixed")
 manager = PlaylistManager(BASE_DIR)
 scheduler = BackgroundScheduler(daemon=True)
@@ -35,14 +34,7 @@ PUBLIC_ONLY = os.getenv("PUBLIC_ONLY", "0") == "1"
 if not PUBLIC_ONLY:
     scheduler.start()
 
-PROCESS_STATE = {
-    "status": "Ocioso",
-    "total_canais": 0,
-    "canais_online": 0,
-    "canais_offline": 0,
-    "manifestos": [],
-    "ultimo_log": "Sistema pronto para execucao."
-}
+PROCESS_STATE = {"status": "Ocioso", "total_canais": 0, "canais_online": 0, "canais_offline": 0, "manifestos": [], "ultimo_log": "Sistema pronto para execucao."}
 PROCESS_LOGS = deque(maxlen=250)
 PAUSE_REQUESTED = threading.Event()
 STOP_REQUESTED = threading.Event()
@@ -50,32 +42,20 @@ ACTIVE_RUN_ID = None
 PIPELINE_LOCK = threading.Lock()
 MIN_FREE_SPACE_BYTES = 512 * 1024 * 1024
 
-
-
 PROCESS_LOGS.extend(manager.db.list_process_events(limit=250))
 LAST_RUNS = manager.db.list_process_runs(limit=1)
 if LAST_RUNS:
     last_run = LAST_RUNS[0]
-    PROCESS_STATE.update({
-        "status": last_run["status"] if last_run["status"] != "Executando..." else "Interrompido",
-        "total_canais": last_run["total_canais"],
-        "canais_online": last_run["canais_online"],
-        "canais_offline": last_run["canais_offline"],
-        "ultimo_log": last_run["last_message"] or PROCESS_STATE["ultimo_log"]
-    })
+    PROCESS_STATE.update({"status": last_run["status"] if last_run["status"] != "Executando..." else "Interrompido", "total_canais": last_run["total_canais"], "canais_online": last_run["canais_online"], "canais_offline": last_run["canais_offline"], "ultimo_log": last_run["last_message"] or PROCESS_STATE["ultimo_log"]})
+
 
 def add_process_log(message: str, level: str = "info", run_id=None):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    PROCESS_LOGS.appendleft({
-        "timestamp": timestamp,
-        "level": level,
-        "message": message
-    })
+    PROCESS_LOGS.appendleft({"timestamp": timestamp, "level": level, "message": message})
     try:
         manager.db.add_process_event(message, level, ACTIVE_RUN_ID if run_id is None else run_id)
     except (OSError, sqlite3.OperationalError):
         pass
-
 
 
 def has_sufficient_disk_space() -> bool:
@@ -83,59 +63,44 @@ def has_sufficient_disk_space() -> bool:
 
 
 def update_log_state(message: str):
-    global PROCESS_STATE
     PROCESS_STATE["ultimo_log"] = message
     add_process_log(message)
 
 
-
-
 def check_internet_health() -> dict:
-    """Facade de compatibilidade para o serviço de conectividade."""
     return _check_internet_health(manager.config_mgr.get_all())
 
 
 def get_output_manifests():
-    """Facade de compatibilidade para o serviço de playlists."""
     return _get_output_manifests(manager)
 
 
 def execute_health_check():
-    """Facade do job periódico de saúde."""
     return _execute_health_check(manager=manager, process_state=PROCESS_STATE, pipeline_lock=PIPELINE_LOCK)
 
 
 def execute_pipeline():
-    """Facade do pipeline para preservar endpoints e scripts legados."""
-    return _execute_pipeline(
-        manager=manager,
-        process_state=PROCESS_STATE,
-        process_logs=PROCESS_LOGS,
-        pause_requested=PAUSE_REQUESTED,
-        stop_requested=STOP_REQUESTED,
-        pipeline_lock=PIPELINE_LOCK,
-        state={"active_run_id": ACTIVE_RUN_ID},
-        min_free_space_bytes=MIN_FREE_SPACE_BYTES,
-        update_log=add_process_log,
-    )
+    return _execute_pipeline(manager=manager, process_state=PROCESS_STATE, process_logs=PROCESS_LOGS, pause_requested=PAUSE_REQUESTED, stop_requested=STOP_REQUESTED, pipeline_lock=PIPELINE_LOCK, state={"active_run_id": ACTIVE_RUN_ID}, min_free_space_bytes=MIN_FREE_SPACE_BYTES, update_log=add_process_log)
 
 
 def setup_scheduler():
-    """Reconfigura os jobs do scheduler a partir da configuração atual."""
     configure_scheduler(scheduler, manager, execute_pipeline, execute_health_check)
 
 
 if not PUBLIC_ONLY:
     setup_scheduler()
 
+
 @app.before_request
 def restrict_public_server():
     if PUBLIC_ONLY and not (request.path.startswith("/playlist/") or request.path.startswith("/epg/")):
         return jsonify({"error": "Apenas links públicos estão disponíveis nesta porta."}), 404
 
+
 @app.context_processor
 def inject_user():
     return dict(user=current_user())
+
 
 def serve_react_app():
     index_path = os.path.join(REACT_DIR, "index.html")
@@ -143,38 +108,39 @@ def serve_react_app():
         return send_file(index_path)
     return None
 
-# --- AUTENTICACAO ---
+
 @app.route("/login", methods=["GET", "POST"])
 def auth_login():
     if request.method == "POST":
-        username = request.form.get("username")
-        password = request.form.get("password")
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
         with manager.db.get_connection() as conn:
             user = conn.execute("SELECT * FROM users WHERE username = ?;", (username,)).fetchone()
-            if user and check_password_hash(user["password_hash"], password):
-                login_user(dict(user))
-                return redirect(url_for("view_dashboard"))
+            if user and user["active"] if "active" in user.keys() else user:
+                if user and check_password_hash(user["password_hash"], password):
+                    login_user(dict(user))
+                    return redirect(url_for("view_dashboard"))
         return render_template("login.html", error="Credenciais invalidas.")
     react_app = serve_react_app()
     if react_app:
         return react_app
     return render_template("login.html")
 
+
 @app.route("/logout")
 def auth_logout():
     logout_user()
     return redirect(url_for("auth_login"))
 
-# --- INTERFACES HTML ---
+
 @app.route("/")
+@require_role("viewer")
 def view_dashboard():
-    # Se o usuario nao estiver logado, redireciona para login
-    if not current_user():
-        return redirect(url_for("auth_login"))
     react_app = serve_react_app()
     if react_app:
         return react_app
     return render_template("dashboard.html")
+
 
 @app.route("/api/me")
 def api_me():
@@ -183,9 +149,11 @@ def api_me():
         return jsonify({"user": None}), 401
     return jsonify({"user": user})
 
+
 @app.route("/app-assets/<path:filename>")
 def react_assets(filename):
     return send_from_directory(REACT_DIR, filename)
+
 
 @app.route("/playlists")
 @require_role("viewer")
@@ -195,6 +163,7 @@ def view_playlists():
         return react_app
     return render_template("playlists.html")
 
+
 @app.route("/channels")
 @require_role("viewer")
 def view_channels():
@@ -203,13 +172,15 @@ def view_channels():
         return react_app
     return render_template("channels.html")
 
+
 @app.route("/users")
 @require_role("admin")
 def view_users():
     react_app = serve_react_app()
     if react_app:
         return react_app
-    return render_template("users.html", users=manager.db.list_users())
+    return render_template("users.html", users=list_public_users(manager.db))
+
 
 @app.route("/settings")
 @require_role("admin")
@@ -219,9 +190,12 @@ def view_settings():
         return react_app
     return render_template("settings.html", config=manager.config_mgr.get_all())
 
-# --- ENDPOINTS REST & TELEMETRIA ---
+
 @app.route("/api/status")
+@require_role("viewer")
 def get_status():
+    from src.domains.authz.service import has_permission
+    user = current_user(manager.db)
     data = dict(PROCESS_STATE)
     channels = manager.db.list_channels()
     if channels:
@@ -229,57 +203,61 @@ def get_status():
         data["canais_online"] = sum(channel.get("status") == "online" for channel in channels)
         data["canais_offline"] = sum(channel.get("status") == "offline" for channel in channels)
         data["canais_desconhecidos"] = sum(channel.get("status") == "desconhecido" for channel in channels)
-    data["logs"] = list(PROCESS_LOGS)
-    data["log_count"] = len(PROCESS_LOGS)
-    data["historico"] = manager.db.list_process_runs(limit=20)
+    if user and has_permission(manager.db, int(user["id"]), user["role"], "logs", "view"):
+        data["logs"] = list(PROCESS_LOGS)
+        data["log_count"] = len(PROCESS_LOGS)
+    else:
+        data.pop("logs", None)
+        data.pop("log_count", None)
+    if user and has_permission(manager.db, int(user["id"]), user["role"], "logs", "view"):
+        data["historico"] = manager.db.list_process_runs(limit=20)
+    else:
+        data.pop("historico", None)
     return jsonify(data)
+
 
 @app.route("/api/v1/internet-health")
 @require_role("viewer")
 def api_internet_health():
     return jsonify(check_internet_health())
 
+
 @app.route("/api/v1/logs")
 @require_role("viewer")
 def api_get_logs():
     return jsonify(manager.db.list_process_events(limit=1000))
+
 
 @app.route("/api/v1/history")
 @require_role("viewer")
 def api_get_history():
     return jsonify(manager.db.list_process_runs(limit=100))
 
+
 @app.route("/api/v1/sync/pause", methods=["POST"])
 @require_role("editor")
 def api_pause_sync():
-    if PROCESS_STATE["status"] != "Executando..." and PROCESS_STATE["status"] != "Pausado":
+    if PROCESS_STATE["status"] not in ("Executando...", "Pausado"):
         return jsonify({"status": "inativo"}), 409
     if PAUSE_REQUESTED.is_set():
-        PAUSE_REQUESTED.clear()
-        PROCESS_STATE["status"] = "Executando..."
-        add_process_log("Execução retomada pelo usuário.")
-        return jsonify({"status": "retomado"})
-    PAUSE_REQUESTED.set()
-    PROCESS_STATE["status"] = "Pausado"
-    add_process_log("Execução pausada pelo usuário.", "warning")
-    return jsonify({"status": "pausado"})
+        PAUSE_REQUESTED.clear(); PROCESS_STATE["status"] = "Executando..."; add_process_log("Execução retomada pelo usuário."); return jsonify({"status": "retomado"})
+    PAUSE_REQUESTED.set(); PROCESS_STATE["status"] = "Pausado"; add_process_log("Execução pausada pelo usuário.", "warning"); return jsonify({"status": "pausado"})
+
 
 @app.route("/api/v1/sync/stop", methods=["POST"])
 @require_role("editor")
 def api_stop_sync():
     if PROCESS_STATE["status"] not in ("Executando...", "Pausado"):
         return jsonify({"status": "inativo"}), 409
-    STOP_REQUESTED.set()
-    PAUSE_REQUESTED.clear()
-    add_process_log("Interrupção solicitada pelo usuário.", "warning")
-    return jsonify({"status": "interrupcao_solicitada"})
+    STOP_REQUESTED.set(); PAUSE_REQUESTED.clear(); add_process_log("Interrupção solicitada pelo usuário.", "warning"); return jsonify({"status": "interrupcao_solicitada"})
+
 
 @app.route("/api/v1/playlists")
 @require_role("viewer")
 def api_get_playlists():
-    manifests = get_output_manifests()
-    PROCESS_STATE["manifestos"] = manifests
+    manifests = get_output_manifests(); PROCESS_STATE["manifestos"] = manifests
     return jsonify({"status": PROCESS_STATE["status"], "manifestos": manifests})
+
 
 @app.route("/api/v1/playlists", methods=["DELETE"])
 @require_role("editor")
@@ -292,200 +270,161 @@ def api_delete_playlists():
         m3u_path = os.path.join(manager.output_dir, os.path.basename(m3u_name))
         xml_name = os.path.splitext(os.path.basename(m3u_name))[0].replace("playlist_", "epg_") + ".xml"
         xml_path = os.path.join(manager.output_dir, xml_name)
-        for path in (m3u_path, xml_path):
-            try:
-                os.remove(path)
-            except FileNotFoundError:
-                pass
+        for file_path in (m3u_path, xml_path):
+            try: os.remove(file_path)
+            except FileNotFoundError: pass
         deleted.append(os.path.basename(m3u_name))
-    PROCESS_STATE["manifestos"] = get_output_manifests()
-    add_process_log(f"Removida(s) {len(deleted)} lista(s) publicada(s).", "warning")
+    PROCESS_STATE["manifestos"] = get_output_manifests(); add_process_log(f"Removida(s) {len(deleted)} lista(s) publicada(s).", "warning")
     return jsonify({"status": "removido", "deleted": deleted})
+
 
 @app.route("/api/v1/playlists/<path:m3u_name>", methods=["PATCH"])
 @require_role("editor")
 def api_rename_playlist(m3u_name):
-    old_name = os.path.basename(m3u_name)
-    new_label = str((request.json or {}).get("name", "")).strip()
+    old_name = os.path.basename(m3u_name); new_label = str((request.json or {}).get("name", "")).strip()
     match = re.fullmatch(r"playlist(?:_[A-Za-z0-9_-]+)?_parte_(\d{2})\.m3u", old_name)
     safe_label = re.sub(r"[^a-zA-Z0-9_-]+", "_", new_label).strip("_-")
-    if not match or not safe_label:
-        return jsonify({"error": "Nome ou lista inválida"}), 400
+    if not match or not safe_label: return jsonify({"error": "Nome ou lista inválida"}), 400
     old_xml = os.path.splitext(old_name)[0].replace("playlist_", "epg_") + ".xml"
-    new_name = f"playlist_{safe_label}_parte_{match.group(1)}.m3u"
-    new_xml = f"epg_{safe_label}_parte_{match.group(1)}.xml"
-    old_m3u_path = os.path.join(manager.output_dir, old_name)
-    old_xml_path = os.path.join(manager.output_dir, old_xml)
-    new_m3u_path = os.path.join(manager.output_dir, new_name)
-    new_xml_path = os.path.join(manager.output_dir, new_xml)
-    if not os.path.isfile(old_m3u_path) or not os.path.isfile(old_xml_path):
-        return jsonify({"error": "Lista ou XML não encontrado"}), 404
-    if old_name != new_name and (os.path.exists(new_m3u_path) or os.path.exists(new_xml_path)):
-        return jsonify({"error": "Já existe uma lista com esse nome"}), 409
-    with open(old_m3u_path, "r", encoding="utf-8", errors="ignore") as playlist_file:
-        content = playlist_file.read().replace(f"/epg/{old_xml}", f"/epg/{new_xml}")
-    with open(old_m3u_path, "w", encoding="utf-8") as playlist_file:
-        playlist_file.write(content)
-    os.replace(old_m3u_path, new_m3u_path)
-    os.replace(old_xml_path, new_xml_path)
-    PROCESS_STATE["manifestos"] = get_output_manifests()
-    add_process_log(f"Lista renomeada para {new_name}.", "success")
+    new_name = f"playlist_{safe_label}_parte_{match.group(1)}.m3u"; new_xml = f"epg_{safe_label}_parte_{match.group(1)}.xml"
+    old_m3u_path = os.path.join(manager.output_dir, old_name); old_xml_path = os.path.join(manager.output_dir, old_xml)
+    new_m3u_path = os.path.join(manager.output_dir, new_name); new_xml_path = os.path.join(manager.output_dir, new_xml)
+    if not os.path.isfile(old_m3u_path) or not os.path.isfile(old_xml_path): return jsonify({"error": "Lista ou XML não encontrado"}), 404
+    if old_name != new_name and (os.path.exists(new_m3u_path) or os.path.exists(new_xml_path)): return jsonify({"error": "Já existe uma lista com esse nome"}), 409
+    with open(old_m3u_path, "r", encoding="utf-8", errors="ignore") as playlist_file: content = playlist_file.read().replace(f"/epg/{old_xml}", f"/epg/{new_xml}")
+    with open(old_m3u_path, "w", encoding="utf-8") as playlist_file: playlist_file.write(content)
+    os.replace(old_m3u_path, new_m3u_path); os.replace(old_xml_path, new_xml_path); PROCESS_STATE["manifestos"] = get_output_manifests(); add_process_log(f"Lista renomeada para {new_name}.", "success")
     return jsonify({"status": "atualizado", "m3u_name": new_name, "xml_name": new_xml})
+
 
 @app.route("/api/v1/channels", methods=["GET"])
 @require_role("viewer")
 def api_get_channels():
-    country = request.args.get("country")
-    city = request.args.get("city")
-    category = request.args.get("category")
-    status = request.args.get("status")
+    country = request.args.get("country"); city = request.args.get("city"); category = request.args.get("category"); status = request.args.get("status")
     channels = manager.db.list_channels(country, category, status, request.args.get("search", ""), request.args.get("sort", "id"), request.args.get("direction", "asc"))
-    if city and city != "todos":
-        channels = [channel for channel in channels if channel.get("city") == city]
+    if city and city != "todos": channels = [channel for channel in channels if channel.get("city") == city]
     return jsonify(channels)
+
 
 @app.route("/api/v1/channels/options")
 @require_role("viewer")
-def api_channel_options():
-    return jsonify(manager.db.channel_filter_options())
+def api_channel_options(): return jsonify(manager.db.channel_filter_options())
+
 
 @app.route("/api/v1/channels/logo", methods=["POST"])
 @require_role("editor")
 def api_upload_channel_logo():
     image = request.files.get("image")
-    if not image or not image.filename:
-        return jsonify({"error": "Nenhuma imagem foi enviada"}), 400
-    allowed = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
-    extension = os.path.splitext(image.filename)[1].lower()
-    if extension not in allowed:
-        return jsonify({"error": "Formato de imagem não permitido"}), 400
-    upload_dir = os.path.join(BASE_DIR, "frontend", "static", "uploads")
-    os.makedirs(upload_dir, exist_ok=True)
-    filename = f"channel_{int(time.time() * 1000)}_{secure_filename(image.filename)}"
-    image.save(os.path.join(upload_dir, filename))
-    return jsonify({"url": f"/static/uploads/{filename}"})
+    if not image or not image.filename: return jsonify({"error": "Nenhuma imagem foi enviada"}), 400
+    allowed = {".png", ".jpg", ".jpeg", ".webp", ".gif"}; extension = os.path.splitext(image.filename)[1].lower()
+    if extension not in allowed: return jsonify({"error": "Formato de imagem não permitido"}), 400
+    upload_dir = os.path.join(BASE_DIR, "frontend", "static", "uploads"); os.makedirs(upload_dir, exist_ok=True)
+    filename = f"channel_{int(time.time() * 1000)}_{secure_filename(image.filename)}"; image.save(os.path.join(upload_dir, filename)); return jsonify({"url": f"/static/uploads/{filename}"})
+
 
 @app.route("/api/v1/users", methods=["GET", "POST"])
 @require_role("admin")
 def api_users():
     if request.method == "POST":
-        data = request.json if request.is_json else request.form
-        if not manager.db.create_user(data.get("username", ""), data.get("password", ""), data.get("role", "viewer")):
-            return jsonify({"error": "Usuário inválido ou já existente"}), 400
-        return jsonify({"status": "criado"}), 201
-    return jsonify(manager.db.list_users())
+        data = dict(request.get_json(silent=True) or request.form)
+        user = authz_create_user(manager.db, data)
+        if not user: return jsonify({"error": "Usuário inválido, senha fraca ou login já existente"}), 400
+        return jsonify(user), 201
+    return jsonify(list_public_users(manager.db))
+
 
 @app.route("/api/v1/users/<int:user_id>", methods=["PATCH"])
 @require_role("admin")
 def api_update_user(user_id):
-    if not manager.db.update_user(user_id, request.json or {}):
-        return jsonify({"error": "Usuário não encontrado ou sem alterações"}), 404
-    return jsonify({"status": "atualizado"})
+    user = authz_update_user(manager.db, user_id, request.get_json(silent=True) or {})
+    if not user: return jsonify({"error": "Usuário não encontrado, inválido ou sem alterações"}), 400
+    return jsonify(user)
+
 
 @app.route("/api/profile", methods=["PATCH"])
 def api_update_profile():
     user = current_user()
-    if not user:
-        return jsonify({"error": "Não autenticado"}), 401
+    if not user: return jsonify({"error": "Não autenticado"}), 401
     values = request.json or {}
-    if values.get("username") and values["username"] != user["username"]:
-        with manager.db.get_connection() as conn:
-            try:
-                conn.execute("UPDATE users SET username = ? WHERE id = ?", (str(values["username"]).strip(), user["id"]))
-                conn.commit()
-            except sqlite3.IntegrityError:
-                return jsonify({"error": "Nome de usuário já existe"}), 409
-    if values.get("password") or values.get("role"):
-        if user["role"] != "admin" and values.get("role"):
-            return jsonify({"error": "Somente admin pode alterar papel"}), 403
-        manager.db.update_user(user["id"], values)
-    return jsonify({"status": "atualizado", "user": manager.db.get_user(user["id"])})
+    allowed = {"username", "display_name", "full_name", "email", "avatar", "phone", "description", "department", "password"}
+    values = {key: value for key, value in values.items() if key in allowed}
+    if "role" in request.json or "active" in request.json or "permissions" in request.json:
+        return jsonify({"error": "Alteração de papel, status ou permissões exige administração."}), 403
+    updated = authz_update_user(manager.db, int(user["id"]), values)
+    if not updated: return jsonify({"error": "Perfil inválido ou sem alterações"}), 400
+    return jsonify({"status": "atualizado", "user": updated})
+
 
 @app.route("/api/admin/restart", methods=["POST"])
 @require_role("admin")
 def api_admin_restart():
-    def restart():
-        os.execv(sys.executable, [sys.executable, "-m", "src.app"])
-    threading.Timer(0.25, restart).start()
-    return jsonify({"status": "reiniciando"})
+    def restart(): os.execv(sys.executable, [sys.executable, "-m", "src.app"])
+    threading.Timer(0.25, restart).start(); return jsonify({"status": "reiniciando"})
+
 
 @app.route("/api/admin/shutdown", methods=["POST"])
 @require_role("admin")
 def api_admin_shutdown():
-    threading.Timer(0.25, os._exit, args=(0,)).start()
-    return jsonify({"status": "desligando"})
+    threading.Timer(0.25, os._exit, args=(0,)).start(); return jsonify({"status": "desligando"})
+
 
 @app.route("/api/v1/channels/<int:ch_id>", methods=["PATCH"])
 @require_role("editor")
 def api_update_channel(ch_id):
-    if not manager.db.update_channel(ch_id, request.json or {}):
-        return jsonify({"error": "Canal nao encontrado ou sem campos validos"}), 404
+    if not manager.db.update_channel(ch_id, request.json or {}): return jsonify({"error": "Canal nao encontrado ou sem campos validos"}), 404
     return jsonify(next(item for item in manager.db.list_channels() if item["id"] == ch_id))
+
 
 @app.route("/api/v1/playlists/generate", methods=["POST"])
 @require_role("editor")
 def api_generate_custom_playlist():
-    manifests = manager.generate_custom_playlist(request.json or {})
-    PROCESS_STATE["manifestos"] = manifests
-    add_process_log(f"Lista personalizada gerada com {len(manifests)} arquivo(s).", "success")
-    return jsonify({"status": "gerado", "manifestos": manifests})
+    manifests = manager.generate_custom_playlist(request.json or {}); PROCESS_STATE["manifestos"] = manifests; add_process_log(f"Lista personalizada gerada com {len(manifests)} arquivo(s).", "success"); return jsonify({"status": "gerado", "manifestos": manifests})
+
 
 @app.route("/api/v1/channels/<int:ch_id>/status", methods=["PATCH"])
 @require_role("editor")
 def api_toggle_channel_status(ch_id):
-    data = request.json or {}
-    new_status = data.get("status", "offline")
-    with manager.db.get_connection() as conn:
-        conn.execute("UPDATE channels SET status = ? WHERE id = ?;", (new_status, ch_id))
-        conn.commit()
+    data = request.json or {}; new_status = data.get("status", "offline")
+    with manager.db.get_connection() as conn: conn.execute("UPDATE channels SET status = ? WHERE id = ?;", (new_status, ch_id)); conn.commit()
     return jsonify({"status": "atualizado"})
+
 
 @app.route("/api/v1/channels/<int:ch_id>/autoremove", methods=["PATCH"])
 @require_role("editor")
 def api_toggle_autoremove(ch_id):
-    data = request.json or {}
-    flag = data.get("auto_remove_if_offline", 1)
-    with manager.db.get_connection() as conn:
-        conn.execute("UPDATE channels SET auto_remove_if_offline = ? WHERE id = ?;", (flag, ch_id))
-        conn.commit()
+    data = request.json or {}; flag = data.get("auto_remove_if_offline", 1)
+    with manager.db.get_connection() as conn: conn.execute("UPDATE channels SET auto_remove_if_offline = ? WHERE id = ?;", (flag, ch_id)); conn.commit()
     return jsonify({"status": "atualizado"})
+
 
 @app.route("/api/v1/sync", methods=["POST"])
 @require_role("editor")
 def api_trigger_sync():
-    if not has_sufficient_disk_space():
-        return jsonify({"status": "erro", "error": "Espaço em disco insuficiente. Libere espaço e tente novamente."}), 507
-    if PROCESS_STATE["status"] != "Executando..." and not PIPELINE_LOCK.locked():
-        thread = threading.Thread(target=execute_pipeline, daemon=True)
-        thread.start()
-        return jsonify({"status": "iniciado"})
+    if not has_sufficient_disk_space(): return jsonify({"status": "erro", "error": "Espaço em disco insuficiente. Libere espaço e tente novamente."}), 507
+    if PROCESS_STATE["status"] != "Executando..." and not PIPELINE_LOCK.locked(): threading.Thread(target=execute_pipeline, daemon=True).start(); return jsonify({"status": "iniciado"})
     return jsonify({"status": "ja_em_execucao"})
+
 
 @app.route("/api/config", methods=["POST"])
 @require_role("admin")
 def api_save_config():
     data = request.json or {}
-    for k, v in data.items():
-        manager.config_mgr.update_key(k, v)
-    setup_scheduler()
-    return jsonify({"status": "atualizado"})
+    for k, v in data.items(): manager.config_mgr.update_key(k, v)
+    setup_scheduler(); return jsonify({"status": "atualizado"})
+
 
 @app.route("/api/config", methods=["GET"])
 @require_role("admin")
-def api_get_config():
-    return jsonify(manager.config_mgr.get_all())
+def api_get_config(): return jsonify(manager.config_mgr.get_all())
 
-# Servidores estaticos de arquivos M3U e XMLTV
+
 @app.route("/playlist/<filename>")
-def serve_playlist(filename):
-    return send_from_directory(manager.output_dir, filename, mimetype="application/x-mpegurl")
+def serve_playlist(filename): return send_from_directory(manager.output_dir, filename, mimetype="application/x-mpegurl")
+
 
 @app.route("/epg/<filename>")
-def serve_epg(filename):
-    return send_from_directory(manager.output_dir, filename, mimetype="application/xml")
+def serve_epg(filename): return send_from_directory(manager.output_dir, filename, mimetype="application/xml")
+
 
 if __name__ == "__main__":
-    cfg = manager.config_mgr.get_all()
-    host_key = "PUBLIC_HOST" if PUBLIC_ONLY else "WEB_HOST"
-    port_key = "PUBLIC_PORT" if PUBLIC_ONLY else "WEB_PORT"
-    app.run(host=cfg[host_key], port=cfg[port_key], debug=False)
+    cfg = manager.config_mgr.get_all(); host_key = "PUBLIC_HOST" if PUBLIC_ONLY else "WEB_HOST"; port_key = "PUBLIC_PORT" if PUBLIC_ONLY else "WEB_PORT"; app.run(host=cfg[host_key], port=cfg[port_key], debug=False)

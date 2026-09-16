@@ -2,8 +2,8 @@ const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 
-// Raiz absoluta do projeto. Nenhum caminho do computador do desenvolvedor
-// deve ser gravado no projeto.
+// A raiz é sempre calculada a partir do próprio script. Isso evita caminhos
+// absolutos gravados no projeto e permite mover o repositório de pasta.
 const rootDir = path.resolve(__dirname, '..');
 const isWin = process.platform === 'win32';
 const dryRun = process.argv.includes('--dry-run');
@@ -18,12 +18,15 @@ function fail(message) {
 
 function run(command, args, options = {}) {
     log(`> ${command} ${args.join(' ')}`);
+
     if (dryRun) return { status: 0 };
 
     const result = spawnSync(command, args, {
         cwd: rootDir,
         stdio: 'inherit',
-        shell: false,
+        // Arquivos .cmd do Windows precisam do shell. Python e outros
+        // executáveis continuam sendo chamados diretamente.
+        shell: options.shell ?? false,
         ...options,
     });
 
@@ -35,19 +38,11 @@ function run(command, args, options = {}) {
     return result;
 }
 
-function getNpmCommand() {
-    // npm_execpath permite que o script funcione também quando chamado por
-    // Corepack, npx ou outra instalação de npm que use um caminho explícito.
-    const execPath = process.env.npm_execpath;
-    if (execPath) {
-        return { command: process.execPath, args: [execPath] };
-    }
-    return { command: isWin ? 'npm.cmd' : 'npm', args: [] };
-}
-
 function runNpm(args) {
-    const npm = getNpmCommand();
-    return run(npm.command, [...npm.args, ...args]);
+    // Usar npm.cmd no Windows evita o EINVAL causado por spawnSync quando
+    // um .cmd é executado sem shell. No Unix, npm é um executável normal.
+    const command = isWin ? 'npm.cmd' : 'npm';
+    return run(command, args, { shell: isWin });
 }
 
 function findCommand(candidates, args = ['--version']) {
@@ -55,7 +50,7 @@ function findCommand(candidates, args = ['--version']) {
         const result = spawnSync(candidate, args, {
             cwd: rootDir,
             stdio: 'ignore',
-            shell: false,
+            shell: isWin && candidate.endsWith('.cmd'),
         });
         if (!result.error && result.status === 0) return candidate;
     }
@@ -63,12 +58,18 @@ function findCommand(candidates, args = ['--version']) {
 }
 
 function getSystemPython() {
-    const candidates = isWin ? ['py', 'python'] : ['python3', 'python'];
-    const python = findCommand(candidates);
-    if (!python) {
-        fail('Python 3 não encontrado. Instale Python 3.11+ e execute o setup novamente.');
+    // py -3 é preferível no Windows porque respeita o Python Launcher e não
+    // depende de um python.exe antigo que tenha ficado no PATH.
+    if (isWin) {
+        const launcher = findCommand(['py']);
+        if (launcher) return { command: launcher, prefix: ['-3'] };
     }
-    return python;
+
+    const python = findCommand(isWin ? ['python'] : ['python3', 'python']);
+    if (!python) {
+        fail('Python 3 não encontrado. Instale Python 3 e execute o setup novamente.');
+    }
+    return { command: python, prefix: [] };
 }
 
 function getVenvPython() {
@@ -77,31 +78,59 @@ function getVenvPython() {
         : path.join(rootDir, '.venv', 'bin', 'python');
 }
 
+function isVenvHealthy(venvPython) {
+    if (!fs.existsSync(venvPython)) return false;
+
+    const result = spawnSync(venvPython, ['-c', 'import sys; print(sys.executable)'], {
+        cwd: rootDir,
+        stdio: 'ignore',
+        shell: false,
+    });
+
+    return !result.error && result.status === 0;
+}
+
 function ensureNode() {
-    const node = findCommand(['node']);
-    if (!node) fail('Node.js não encontrado. Instale Node.js 18+ antes de continuar.');
+    if (!findCommand(['node'])) {
+        fail('Node.js não encontrado. Instale Node.js 18+ e execute o setup novamente.');
+    }
 }
 
 function ensureEnvFile() {
     const envPath = path.join(rootDir, '.env');
     const examplePath = path.join(rootDir, '.env.example');
+
     if (fs.existsSync(envPath)) return;
     if (!fs.existsSync(examplePath)) {
         fail('Arquivo .env.example não encontrado; não foi possível criar o .env.');
     }
+
     fs.copyFileSync(examplePath, envPath);
     log('[OK] Arquivo .env criado a partir do .env.example.');
 }
 
-function ensureVenv(pythonCommand) {
+function ensureVenv(python) {
+    const venvDir = path.join(rootDir, '.venv');
     const venvPython = getVenvPython();
+
+    // Um virtualenv contém caminhos internos para o Python usado na criação.
+    // Se o projeto foi movido (por exemplo, C:\www -> H:\app), o executável
+    // pode existir mas continuar apontando para o Python antigo. Nesse caso,
+    // recriamos somente o .venv e preservamos todo o código do projeto.
+    if (fs.existsSync(venvDir) && !isVenvHealthy(venvPython)) {
+        log('[WARN] .venv existente está inválido ou aponta para outro caminho. Recriando...');
+        fs.rmSync(venvDir, { recursive: true, force: true });
+    }
+
     if (!fs.existsSync(venvPython)) {
         log('[INFO] Criando ambiente virtual Python local...');
-        run(pythonCommand, ['-m', 'venv', '.venv']);
+        run(python.command, [...python.prefix, '-m', 'venv', '.venv']);
     }
-    if (!fs.existsSync(venvPython)) {
-        fail(`Ambiente virtual não foi criado em ${venvPython}.`);
+
+    if (!isVenvHealthy(venvPython)) {
+        fail(`O ambiente virtual não pôde ser inicializado corretamente: ${venvPython}`);
     }
+
     return venvPython;
 }
 
@@ -119,8 +148,9 @@ function installFrontendDeps() {
         fail('frontend/react/package.json não encontrado.');
     }
 
-    // npm ci só é usado quando existe lockfile. Caso contrário, npm install
-    // cria o lockfile para que as próximas instalações sejam determinísticas.
+    // npm ci é determinístico quando o lockfile está presente. Em um clone
+    // sem lockfile, npm install cria o lockfile e permite instalações futuras
+    // com npm ci.
     if (fs.existsSync(lockPath)) {
         runNpm(['--prefix', 'frontend/react', 'ci']);
     } else {
@@ -138,10 +168,11 @@ function installFrontendDeps() {
 function main() {
     log('=== M3U Processor - Setup ===');
     ensureNode();
-    const systemPython = getSystemPython();
     ensureEnvFile();
 
+    const systemPython = getSystemPython();
     const venvPython = ensureVenv(systemPython);
+
     installPythonDeps(venvPython);
     installFrontendDeps();
 

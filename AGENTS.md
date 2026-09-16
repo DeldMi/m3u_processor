@@ -18,6 +18,12 @@ Sistema para:
 - publicar links públicos para clientes/players
 - gerenciar usuários, permissões e configurações
 
+### Novas apricação
+
+### Pagina channels
+
+- na edição do canal coloca uma opção para editar o numero do canal (CH. NO.).
+
 ## Stack principal
 
 - Backend: Python + Flask

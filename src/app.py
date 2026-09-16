@@ -196,14 +196,8 @@ def view_settings():
 def get_status():
     user = current_user(manager.db)
     data = {"status": PROCESS_STATE["status"], "ultimo_log": PROCESS_STATE["ultimo_log"]}
-
     if user and has_permission(manager.db, int(user["id"]), user["role"], "dashboard", "view"):
-        data.update({
-            "total_canais": PROCESS_STATE["total_canais"],
-            "canais_online": PROCESS_STATE["canais_online"],
-            "canais_offline": PROCESS_STATE["canais_offline"],
-        })
-
+        data.update({"total_canais": PROCESS_STATE["total_canais"], "canais_online": PROCESS_STATE["canais_online"], "canais_offline": PROCESS_STATE["canais_offline"]})
     if user and has_permission(manager.db, int(user["id"]), user["role"], "channels", "view"):
         channels = manager.db.list_channels()
         if channels:
@@ -211,22 +205,15 @@ def get_status():
             data["canais_online"] = sum(channel.get("status") == "online" for channel in channels)
             data["canais_offline"] = sum(channel.get("status") == "offline" for channel in channels)
             data["canais_desconhecidos"] = sum(channel.get("status") == "desconhecido" for channel in channels)
-
     if user and has_permission(manager.db, int(user["id"]), user["role"], "playlists", "view"):
         data["manifestos"] = get_output_manifests()
         PROCESS_STATE["manifestos"] = data["manifestos"]
-
     if user and has_permission(manager.db, int(user["id"]), user["role"], "logs", "view"):
         data["logs"] = list(PROCESS_LOGS)
         data["log_count"] = len(PROCESS_LOGS)
         data["historico"] = manager.db.list_process_runs(limit=20)
-
     if user and has_permission(manager.db, int(user["id"]), user["role"], "sync", "view"):
-        data["sync"] = {
-            "status": PROCESS_STATE["status"],
-            "active": PROCESS_STATE["status"] in ("Executando...", "Pausado"),
-        }
-
+        data["sync"] = {"status": PROCESS_STATE["status"], "active": PROCESS_STATE["status"] in ("Executando...", "Pausado")}
     return jsonify(data)
 
 
@@ -339,10 +326,6 @@ def api_upload_channel_logo():
 @app.route("/api/v1/users", methods=["GET", "POST"])
 @require_role("admin")
 def api_users():
-    user = current_user(manager.db)
-    required_action = "create" if request.method == "POST" else "view"
-    if not user or not has_permission(manager.db, int(user["id"]), user["role"], "users", required_action):
-        return {"error": "Permissão insuficiente", "resource": "users", "action": required_action}, 403
     if request.method == "POST":
         data = dict(request.get_json(silent=True) or request.form)
         user = authz_create_user(manager.db, data)

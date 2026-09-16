@@ -1,0 +1,7 @@
+name = "m3u-processor"
+compatibility_date = "2026-09-16"
+pages_build_output_dir = "frontend/react/dist"
+
+# O backend Flask/Python não é executado no Pages. Configure a URL pública
+# do backend como variável VITE_API_ORIGIN quando o backend estiver hospedado
+# em um serviço compatível com Python.

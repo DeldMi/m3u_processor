@@ -5,7 +5,6 @@ from flask import session, abort, redirect, url_for, request, current_app
 
 ROLE_HIERARCHY = {"admin": 3, "editor": 2, "viewer": 1}
 
-# Compatibilidade das rotas antigas com o novo modelo Recurso × Ação.
 ROUTE_PERMISSIONS = {
     "api_status": ("dashboard", "view"),
     "api_internet_health": ("health", "view"),
@@ -64,10 +63,11 @@ def current_user(db=None):
             from src.db import Database
             from src.config import ConfigManager
             root_dir = os.path.abspath(os.path.join(current_app.root_path, ".."))
-            cfg = ConfigManager(root_dir).get_all()
+            ConfigManager(root_dir).get_all()
             db = Database(os.path.join(root_dir, "data", "app.db"))
         except Exception:
-            return {"id": session["user_id"], "username": session["username"], "role": session["role"]}
+            logout_user()
+            return None
     try:
         service = _authz(db)
         user = service.public_user(db, int(session["user_id"]))
@@ -86,7 +86,27 @@ def current_user(db=None):
         session["role"] = user["role"]
         return user
     except Exception:
-        return {"id": session["user_id"], "username": session["username"], "role": session["role"]}
+        # Nunca transformar falha de banco/esquema em sessão autorizada.
+        logout_user()
+        return None
+
+
+def _api_token_is_valid() -> bool:
+    """Mantém o token legado, mas apenas para rotas explicitamente administrativas.
+
+    O token não recebe automaticamente todas as permissões RBAC de uma sessão.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return False
+    token = auth_header.split(" ", 1)[1].strip()
+    if not token:
+        return False
+    from src.config import ConfigManager
+    root_dir = os.path.abspath(os.path.join(current_app.root_path, ".."))
+    cfg = ConfigManager(root_dir).get_all()
+    configured = str(cfg.get("API_TOKEN") or "").strip()
+    return bool(configured and token == configured)
 
 
 def require_role(min_role: str):
@@ -95,15 +115,13 @@ def require_role(min_role: str):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             user = current_user()
-            auth_header = request.headers.get("Authorization", "")
-            if auth_header.startswith("Bearer "):
-                token = auth_header.split(" ", 1)[1].strip()
-                from src.config import ConfigManager
-                root_dir = os.path.abspath(os.path.join(current_app.root_path, ".."))
-                cfg = ConfigManager(root_dir).get_all()
-                if token and token == cfg.get("API_TOKEN"):
-                    return f(*args, **kwargs)
             if not user:
+                # Token legado continua disponível para integrações internas,
+                # mas não substitui a autorização granular de usuários.
+                if _api_token_is_valid() and request.path.startswith("/api/"):
+                    permission = ROUTE_PERMISSIONS.get(f.__name__)
+                    if permission and permission[0] in {"dashboard", "health", "logs", "playlists", "channels", "sync", "settings", "public_files"}:
+                        return f(*args, **kwargs)
                 if request.path.startswith("/api/"):
                     return {"error": "Não autenticado"}, 401
                 return redirect(url_for("auth_login"))

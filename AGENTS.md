@@ -315,3 +315,33 @@ Se qualquer IA ou outro chat precisar entender o projeto rapidamente, deve come�
 3. revisar o stack e scripts de raiz
 4. verificar docs/ e os endpoints relevantes
 5. seguir as convenções de uso do usuário: root command-first, UI consistente, listas com nome e link público
+
+## Organização semântica atualizada
+
+O projeto passou a ser organizado gradualmente por domínio para reduzir acoplamento sem quebrar as rotas existentes.
+
+Backend novo:
+- `src/core/scheduler.py` — configuração central do APScheduler
+- `src/domains/health/internet.py` — teste de internet/ping
+- `src/domains/playlists/service.py` — manifests e publicação
+- `src/domains/sync/service.py` — execução do pipeline e saúde automática dos canais
+
+Frontend novo:
+- `frontend/react/src/app/App.tsx` — composição da SPA
+- `frontend/react/src/components/Common.tsx` — componentes compartilhados
+- `frontend/react/src/features/dashboard/` — Painel Geral
+- `frontend/react/src/features/channels/` — Canais e editor
+- `frontend/react/src/features/playlists/` — Listas publicadas
+- `frontend/react/src/features/settings/` — Configurações
+- `frontend/react/src/features/users/` — Usuários
+- `frontend/react/src/features/player/` — player HLS
+- `frontend/react/src/services/api.ts` — cliente HTTP central
+- `frontend/react/src/types/` — contratos TypeScript
+- `frontend/react/src/main.tsx` — entrypoint mínimo
+
+Automação:
+- `npm run test` — testes Python
+- `npm run typecheck` — build TypeScript/Vite
+- `npm run verify` — verificação completa do projeto
+
+Regra de migração: novas funcionalidades devem ser colocadas no domínio correspondente, evitando aumentar `app.py` ou `main.tsx` com lógica de negócio.

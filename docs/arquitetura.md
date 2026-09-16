@@ -216,3 +216,55 @@ Documentação complementar:
 - [configuracao.md](configuracao.md)
 - [troubleshooting.md](troubleshooting.md)
 - [acesso-e-recuperacao.md](acesso-e-recuperacao.md)
+
+## Organização semântica e automação
+
+A partir da atualização estrutural de setembro de 2026, o projeto passou a adotar uma organização incremental por domínio, preservando os endpoints existentes.
+
+### Backend
+
+```text
+src/
+├── core/
+│   └── scheduler.py             # configuração do APScheduler
+├── domains/
+│   ├── health/
+│   │   └── internet.py         # teste de conectividade e latência
+│   ├── playlists/
+│   │   └── service.py          # descoberta e publicação de manifests
+│   └── sync/
+│       └── service.py           # pipeline e saúde dos canais
+├── app.py                       # composição Flask + compatibilidade das rotas
+├── manager.py                   # processamento legado mantido compatível
+└── ...
+```
+
+### Frontend
+
+```text
+frontend/react/src/
+├── app/App.tsx                  # composição e roteamento da SPA
+├── components/Common.tsx        # layout e componentes compartilhados
+├── features/
+│   ├── dashboard/DashboardPage.tsx
+│   ├── channels/ChannelsPage.tsx
+│   ├── playlists/PlaylistsPage.tsx
+│   ├── settings/SettingsPage.tsx
+│   ├── users/UsersPage.tsx
+│   └── player/Player.tsx
+├── services/api.ts              # cliente HTTP único
+├── types/index.ts               # contratos TypeScript
+├── styles.scss
+└── main.tsx                     # entrypoint mínimo
+```
+
+### Verificação automatizada
+
+O comando `npm run verify` executa, em ordem:
+
+1. compilação/sintaxe Python;
+2. testes Python;
+3. build TypeScript/Vite;
+4. conferência de arquivos estruturais obrigatórios.
+
+As dependências do frontend não fazem parte do repositório: execute `npm run setup` antes da verificação em uma instalação nova.

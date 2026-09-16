@@ -13,6 +13,9 @@
         "docker:up": "docker compose up --build -d",
         "docker:down": "docker compose down",
         "docker:logs": "docker compose logs -f",
-        "open": "node ./scripts/open.js"
+        "open": "node ./scripts/open.js",
+        "verify": "node ./scripts/verify.js",
+        "test": "python -m unittest discover -s tests -v",
+        "typecheck": "npm --prefix frontend/react run build"
     }
 }

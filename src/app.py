@@ -1,25 +1,26 @@
 import os
 import threading
-import asyncio
 import glob
 import time
-import re
 import shutil
 import sqlite3
 import sys
-import platform
-import socket
-import subprocess
-from urllib.parse import urlparse
-from werkzeug.utils import secure_filename
 from collections import deque
 from datetime import datetime
+
 from flask import Flask, render_template, jsonify, request, redirect, url_for, send_from_directory, send_file
 from werkzeug.security import check_password_hash, generate_password_hash
-from src.manager import PlaylistManager
-from src.config import ConfigManager
-from src.auth import login_user, logout_user, current_user, require_role
+from werkzeug.utils import secure_filename
 from apscheduler.schedulers.background import BackgroundScheduler
+
+from src.auth import login_user, logout_user, current_user, require_role
+from src.config import ConfigManager
+from src.core.scheduler import configure_scheduler
+from src.domains.health.internet import check_internet_health as _check_internet_health
+from src.domains.playlists.service import get_output_manifests as _get_output_manifests
+from src.domains.sync.service import execute_health_check as _execute_health_check
+from src.domains.sync.service import execute_pipeline as _execute_pipeline
+from src.manager import PlaylistManager
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 app = Flask(__name__, 
@@ -49,21 +50,7 @@ ACTIVE_RUN_ID = None
 PIPELINE_LOCK = threading.Lock()
 MIN_FREE_SPACE_BYTES = 512 * 1024 * 1024
 
-class PipelineInterrupted(Exception):
-    pass
 
-def pipeline_checkpoint(stage: str):
-    global PROCESS_STATE
-    if STOP_REQUESTED.is_set():
-        raise PipelineInterrupted("Execução interrompida pelo usuário.")
-    while PAUSE_REQUESTED.is_set() and not STOP_REQUESTED.is_set():
-        PROCESS_STATE["status"] = "Pausado"
-        time.sleep(0.2)
-    if STOP_REQUESTED.is_set():
-        raise PipelineInterrupted("Execução interrompida pelo usuário.")
-    if PROCESS_STATE["status"] == "Pausado":
-        PROCESS_STATE["status"] = "Executando..."
-        add_process_log("Execução retomada.")
 
 PROCESS_LOGS.extend(manager.db.list_process_events(limit=250))
 LAST_RUNS = manager.db.list_process_runs(limit=1)
@@ -77,8 +64,7 @@ if LAST_RUNS:
         "ultimo_log": last_run["last_message"] or PROCESS_STATE["ultimo_log"]
     })
 
-def add_process_log(message: str, level: str = "info"):
-    global ACTIVE_RUN_ID
+def add_process_log(message: str, level: str = "info", run_id=None):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     PROCESS_LOGS.appendleft({
         "timestamp": timestamp,
@@ -86,162 +72,58 @@ def add_process_log(message: str, level: str = "info"):
         "message": message
     })
     try:
-        manager.db.add_process_event(message, level, ACTIVE_RUN_ID)
+        manager.db.add_process_event(message, level, ACTIVE_RUN_ID if run_id is None else run_id)
     except (OSError, sqlite3.OperationalError):
         pass
 
-def _resolve_ping_host(target: str) -> str:
-    """Converte um IP, domínio ou URL em um host adequado ao comando ping."""
-    value = str(target or "").strip()
-    if not value:
-        return "1.1.1.1"
-    parsed = urlparse(value if "://" in value else f"//{value}")
-    host = parsed.hostname or value.split("/", 1)[0]
-    return host.strip("[]")
 
-def check_internet_health() -> dict:
-    """Executa um único teste ICMP sem shell e retorna status e latência."""
-    cfg = manager.config_mgr.get_all()
-    target = str(cfg.get("INTERNET_TEST_TARGET") or "1.1.1.1").strip()
-    interval_seconds = max(1, int(cfg.get("INTERNET_PING_INTERVAL_SECONDS", 5)))
-    timeout_seconds = max(0.2, min(float(cfg.get("INTERNET_PING_TIMEOUT_SECONDS", 2)), 30.0))
-    host = _resolve_ping_host(target)
-    start = time.perf_counter()
-    system = platform.system().lower()
-    if system == "windows":
-        command = ["ping", "-n", "1", "-w", str(int(timeout_seconds * 1000)), host]
-    else:
-        command = ["ping", "-c", "1", "-W", str(max(1, int(timeout_seconds))), host]
-    try:
-        result = subprocess.run(command, capture_output=True, text=True, timeout=timeout_seconds + 2, check=False)
-        latency_ms = round((time.perf_counter() - start) * 1000, 2)
-        if result.returncode == 0:
-            return {"online": True, "target": target, "host": host, "latency_ms": latency_ms, "interval_seconds": interval_seconds, "timeout_seconds": timeout_seconds, "error": ""}
-        return {"online": False, "target": target, "host": host, "latency_ms": latency_ms, "interval_seconds": interval_seconds, "timeout_seconds": timeout_seconds, "error": "Destino sem resposta"}
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
-        # Fallback simples: testa TCP/443 quando o utilitário ICMP não existe no sistema.
-        try:
-            fallback_start = time.perf_counter()
-            with socket.create_connection((host, 443), timeout=timeout_seconds):
-                latency_ms = round((time.perf_counter() - fallback_start) * 1000, 2)
-                return {"online": True, "target": target, "host": host, "latency_ms": latency_ms, "interval_seconds": interval_seconds, "timeout_seconds": timeout_seconds, "error": "Ping ICMP indisponível; conexão TCP/443 confirmada"}
-        except OSError:
-            latency_ms = round((time.perf_counter() - start) * 1000, 2)
-            return {"online": False, "target": target, "host": host, "latency_ms": latency_ms, "interval_seconds": interval_seconds, "timeout_seconds": timeout_seconds, "error": str(exc)}
 
 def has_sufficient_disk_space() -> bool:
     return shutil.disk_usage(BASE_DIR).free >= MIN_FREE_SPACE_BYTES
 
-def get_output_manifests():
-    cfg = manager.config_mgr.get_all()
-    manifests = []
-    for m3u_path in sorted(glob.glob(os.path.join(manager.output_dir, "*.m3u"))):
-        m3u_name = os.path.basename(m3u_path)
-        xml_name = os.path.splitext(m3u_name)[0].replace("playlist_", "epg_") + ".xml"
-        xml_path = os.path.join(manager.output_dir, xml_name)
-        try:
-            with open(m3u_path, "r", encoding="utf-8", errors="ignore") as playlist_file:
-                total = sum(1 for line in playlist_file if line.startswith("#EXTINF:"))
-        except OSError:
-            total = 0
-        manifests.append({
-            "m3u_name": m3u_name,
-            "m3u_url": f"{cfg['PUBLIC_BASE_URL']}/playlist/{m3u_name}",
-            "xml_name": xml_name,
-            "xml_url": f"{cfg['PUBLIC_BASE_URL']}/epg/{xml_name}",
-            "total": total,
-            "xml_exists": os.path.exists(xml_path)
-        })
-    return manifests
 
 def update_log_state(message: str):
     global PROCESS_STATE
     PROCESS_STATE["ultimo_log"] = message
     add_process_log(message)
 
-def execute_pipeline():
-    global PROCESS_STATE, ACTIVE_RUN_ID
-    if PROCESS_STATE["status"] == "Executando..." or not PIPELINE_LOCK.acquire(blocking=False):
-        return
 
-    loop = None
-    try:
-        if not has_sufficient_disk_space():
-            PROCESS_STATE["status"] = "Erro"
-            PROCESS_STATE["ultimo_log"] = "Espaço em disco insuficiente para executar a sincronização."
-            return
-        STOP_REQUESTED.clear()
-        PAUSE_REQUESTED.clear()
-        ACTIVE_RUN_ID = manager.db.start_process_run()
-        PROCESS_STATE["status"] = "Executando..."
-        update_log_state("Iniciando auditoria completa...")
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        res = loop.run_until_complete(manager.sync_and_audit(progress_callback=update_log_state, control_callback=pipeline_checkpoint))
-        PROCESS_STATE["total_canais"] = res.get("total", 0)
-        PROCESS_STATE["canais_online"] = res.get("online", 0)
-        PROCESS_STATE["canais_offline"] = res.get("offline", 0)
-        PROCESS_STATE["manifestos"] = res.get("partitions", [])
-        PROCESS_STATE["status"] = "Concluido"
-        PROCESS_STATE["ultimo_log"] = f"Sucesso! {res.get('online', 0)} canais operantes salvos em {len(res.get('partitions', []))} lista(s). Log: {res.get('log_file')}"
-        add_process_log(PROCESS_STATE["ultimo_log"], "success")
-        manager.db.finish_process_run(ACTIVE_RUN_ID, "Concluido", res, PROCESS_STATE["ultimo_log"])
-    except PipelineInterrupted as exc:
-        PROCESS_STATE["status"] = "Interrompido"
-        PROCESS_STATE["ultimo_log"] = str(exc)
-        add_process_log(PROCESS_STATE["ultimo_log"], "warning")
-        manager.db.finish_process_run(ACTIVE_RUN_ID, "Interrompido", {}, PROCESS_STATE["ultimo_log"])
-    except (OSError, sqlite3.OperationalError) as e:
-        PROCESS_STATE["status"] = "Erro"
-        PROCESS_STATE["ultimo_log"] = "Falha de armazenamento durante a execução. Libere espaço em disco e tente novamente."
-        if "database or disk is full" not in str(e).lower() and "no space left" not in str(e).lower():
-            PROCESS_STATE["ultimo_log"] = f"Falha de armazenamento: {str(e)}"
-        add_process_log(PROCESS_STATE["ultimo_log"], "error")
-        if ACTIVE_RUN_ID is not None:
-            try:
-                manager.db.finish_process_run(ACTIVE_RUN_ID, "Erro", {}, PROCESS_STATE["ultimo_log"])
-            except (OSError, sqlite3.OperationalError):
-                pass
-    except Exception as e:
-        PROCESS_STATE["status"] = "Erro"
-        PROCESS_STATE["ultimo_log"] = f"Falha na execucao: {str(e)}"
-        add_process_log(PROCESS_STATE["ultimo_log"], "error")
-        manager.db.finish_process_run(ACTIVE_RUN_ID, "Erro", {}, PROCESS_STATE["ultimo_log"])
-    finally:
-        PAUSE_REQUESTED.clear()
-        STOP_REQUESTED.clear()
-        ACTIVE_RUN_ID = None
-        if loop is not None:
-            loop.close()
-        PIPELINE_LOCK.release()
+
+
+def check_internet_health() -> dict:
+    """Facade de compatibilidade para o serviço de conectividade."""
+    return _check_internet_health(manager.config_mgr.get_all())
+
+
+def get_output_manifests():
+    """Facade de compatibilidade para o serviço de playlists."""
+    return _get_output_manifests(manager)
+
 
 def execute_health_check():
-    if PIPELINE_LOCK.locked() or not has_sufficient_disk_space():
-        return
-    try:
-        result = asyncio.run(manager.refresh_channel_health())
-        PROCESS_STATE["total_canais"] = result["total"]
-        PROCESS_STATE["canais_online"] = result["online"]
-        PROCESS_STATE["canais_offline"] = result["offline"]
-        PROCESS_STATE["ultimo_log"] = f"Saúde atualizada: {result['online']} online, {result['offline']} offline."
-    except (OSError, sqlite3.OperationalError):
-        return
+    """Facade do job periódico de saúde."""
+    return _execute_health_check(manager=manager, process_state=PROCESS_STATE, pipeline_lock=PIPELINE_LOCK)
+
+
+def execute_pipeline():
+    """Facade do pipeline para preservar endpoints e scripts legados."""
+    return _execute_pipeline(
+        manager=manager,
+        process_state=PROCESS_STATE,
+        process_logs=PROCESS_LOGS,
+        pause_requested=PAUSE_REQUESTED,
+        stop_requested=STOP_REQUESTED,
+        pipeline_lock=PIPELINE_LOCK,
+        state={"active_run_id": ACTIVE_RUN_ID},
+        min_free_space_bytes=MIN_FREE_SPACE_BYTES,
+        update_log=add_process_log,
+    )
+
 
 def setup_scheduler():
-    scheduler.remove_all_jobs()
-    cfg = manager.config_mgr.get_all()
-    mode = cfg.get("SCHEDULE_MODE", "DISABLED")
-    scheduler.add_job(execute_health_check, "interval", seconds=max(15, cfg.get("HEALTH_CHECK_INTERVAL_SECONDS", 60)), id="m3u_health_job", replace_existing=True, max_instances=1, coalesce=True, next_run_time=datetime.now())
+    """Reconfigura os jobs do scheduler a partir da configuração atual."""
+    configure_scheduler(scheduler, manager, execute_pipeline, execute_health_check)
 
-    if mode == "INTERVAL":
-        hours = max(1, cfg.get("SCHEDULE_INTERVAL_HOURS", 12))
-        scheduler.add_job(execute_pipeline, 'interval', hours=hours, id="m3u_sync_job")
-    elif mode == "CRON":
-        try:
-            h, m = cfg.get("SCHEDULE_CRON_TIME", "03:00").split(":")
-            scheduler.add_job(execute_pipeline, 'cron', hour=int(h), minute=int(m), id="m3u_sync_job")
-        except Exception:
-            pass
 
 if not PUBLIC_ONLY:
     setup_scheduler()

@@ -174,3 +174,13 @@ Se quiser, o próximo passo pode ser criar também um guia de uso específico pa
 - backup e restauração do banco SQLite
 - migração para Linux server/VM
 - configuração de domínio e HTTPS
+
+## Verificação automática
+
+Depois de instalar o ambiente, use:
+
+```bash
+npm run verify
+```
+
+O comando valida Python, testes do backend, TypeScript/Vite e a estrutura mínima do projeto.

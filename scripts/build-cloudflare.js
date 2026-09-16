@@ -32,30 +32,46 @@ function run(command, args, label, cwd = ROOT) {
     }
 }
 
+function frontendTool(name) {
+    return path.join(
+        FRONTEND,
+        'node_modules',
+        '.bin',
+        isWindows ? `${name}.cmd` : name,
+    );
+}
+
 if (!fs.existsSync(path.join(FRONTEND, 'package.json'))) {
     console.error('[ERRO] package.json do frontend não encontrado em frontend/react.');
     process.exit(1);
 }
 
-// Cloudflare Workers Builds/Pages pode instalar as dependências do diretório raiz
-// usando Bun. O projeto, porém, possui uma aplicação React independente em
-// frontend/react. Instale explicitamente as dependências dela antes do build.
-const frontendNodeModules = path.join(FRONTEND, 'node_modules');
+// Cloudflare pode executar `bun install` na raiz antes deste script. O workspace
+// declarado no package.json permite que Bun instale o frontend; ainda assim,
+// verificamos a ferramenta real necessária para evitar depender apenas da
+// existência do diretório node_modules.
 const frontendLock = path.join(FRONTEND, 'package-lock.json');
+const tsc = frontendTool('tsc');
 
-if (!fs.existsSync(frontendNodeModules)) {
+if (!fs.existsSync(tsc)) {
+    console.log('[INFO] Dependências do frontend não estão prontas. Instalando agora...');
+
     if (fs.existsSync(frontendLock)) {
-        run(npmCommand, ['ci', '--no-audit', '--no-fund'], 'Instalar dependências do frontend', FRONTEND);
+        run(
+            npmCommand,
+            ['ci', '--no-audit', '--no-fund'],
+            'Instalar dependências do frontend',
+            FRONTEND,
+        );
     } else {
-        run(npmCommand, ['install', '--no-audit', '--no-fund'], 'Instalar dependências do frontend', FRONTEND);
+        run(
+            npmCommand,
+            ['install', '--no-audit', '--no-fund'],
+            'Instalar dependências do frontend',
+            FRONTEND,
+        );
     }
 }
-
-const tsc = path.join(
-    frontendNodeModules,
-    '.bin',
-    isWindows ? 'tsc.cmd' : 'tsc',
-);
 
 if (!fs.existsSync(tsc)) {
     console.error('[ERRO] TypeScript não foi instalado corretamente em frontend/react/node_modules.');

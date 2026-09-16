@@ -533,16 +533,24 @@ textarea {
     width: 100%;
 }
 
-.toolbar select,
-.form-grid select,
-input,
+input:not([type='checkbox']):not([type='radio']):not([type='submit']):not([type='button']):not([type='color']),
+select,
 textarea {
+    width: 100%;
     color: $ink;
     background: #08171c;
     border: 1px solid $line;
     border-radius: 6px;
-    padding: 10px;
+    padding: 10px 12px;
     outline: 0;
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+input:not([type='checkbox']):not([type='radio']):not([type='submit']):not([type='button']):not([type='color']):focus,
+select:focus,
+textarea:focus {
+    border-color: $blue;
+    box-shadow: 0 0 0 3px rgba(70, 195, 223, .14);
 }
 
 .toolbar select {

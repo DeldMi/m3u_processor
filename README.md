@@ -1,38 +1,55 @@
-# Processador, Auditor e Classificador M3U / IPTV
+# M3U Architect / Processador IPTV
 
-## Visão Geral da Arquitetura
-Sistema estruturado para classificação taxonômica (País, Estado, Cidade), identificação de tipos de fluxo (Linear vs VOD/Rádio), expurgo de canais mortos e fatiamento estrito em blocos de até **400 canais por arquivo M3U e XMLTV**.
+Sistema para processar listas M3U/IPTV, validar canais em tempo real, classificar metadados, gerar playlists M3U e EPG XMLTV, e publicar links públicos para distribuição.
 
-## Padrões de Segurança e Controle de Acesso (RBAC)
-* `admin`: Acesso irrestrito a configurações de rede, credenciais e agendamentos.
-* `editor`: Permissão para editar metadados, forçar status online/offline e disparar sincronizações.
-* `viewer`: Restrito à navegação, reprodução de fluxos e consumo de links das listas geradas.
+## O que é este projeto
 
-Credencial Padrão Inicial:
-* **Usuário**: `admin`
-* **Senha**: `admin123`
+Este projeto combina:
 
-## Integração via API e Webhooks
-Disparo de auditoria externa via requisição HTTP:
-```bash
-curl -X POST [http://127.0.0.1:5000/api/v1/sync](http://127.0.0.1:5000/api/v1/sync) \
-     -H "Authorization: Bearer m3u_sec_token_99812401824"
-```
-Instruções de Implantação
-Via Docker (Ambiente Isolado)
+- Flask para backend e APIs
+- SQLite para dados
+- React + Vite + Tailwind + SCSS para interface web
+- processamento de listas M3U e XMLTV
+- validação de canais online/offline
+- geração de arquivos em blocos
+- autenticação por usuário e roles
+- agendamento automático via APScheduler
 
-```sh
-docker compose up -d --build
-```
+## Estrutura do projeto
 
-Acesse no navegador: http://localhost:5000
-Opção 2: Local no Windows
+- `src/` — backend e lógica principal
+- `frontend/react/` — frontend React
+- `input/` — listas de canais locais
+- `output/` — playlists e XMLTV gerados
+- `logs/` — relatórios de auditoria JSON
+- `data/` — banco SQLite
+- `docs/` — documentação detalhada
+- `Dockerfile` — imagem para Docker
+- `docker-compose.yml` — ambiente de execução em container
 
-    Execute ``` setup_env.bat ``` (uma vez).
+## Como funciona
 
-    Execute ``` run_menu.bat ``` (abre o painel e agendador).
+O fluxo geral é:
 
-Opção 3: Local no Linux
+1. lê canais de arquivos locais e URLs remotas
+2. deduplica entradas
+3. valida disponibilidade dos canais
+4. persiste dados no banco SQLite
+5. classifica cada canal por país, cidade, categoria e grupo
+6. gera M3U e EPG em partições
+7. publica os links na web com `BASE_URL`
+8. disponibiliza operação via painel web e APIs
+
+## Acesso inicial
+
+Credenciais padrão:
+
+- usuário: `admin`
+- senha: `admin123`
+
+## Instalação rápida
+
+### Linux
 
 ```bash
 chmod +x *.sh
@@ -40,22 +57,107 @@ chmod +x *.sh
 ./run_menu.sh
 ```
 
----
+### Windows
 
-```xml
- <FollowUp label="Quer suporte a múltiplos arquivos EPG simultâneos por país ou categoria?" query="Como configurar a mesclagem automática de múltiplos guias EPG de países diferentes do iptv-epg.org em cada partição de 400 canais?"/>
- ```
+```bat
+setup_env.bat
+run_menu.bat
+```
 
- # Procedimento de Inicialização
+### Docker
 
-1.    Certifique-se de que os 4 arquivos acima estejam gravados dentro de C:\www\m3u_processor\frontend\templates\.
+```bash
+docker compose up -d --build
+```
 
-    2. Reinicie o servidor executando run_menu.bat.
+## Como acessar
 
-    3. Acesse [http://127.0.0.1:5000](http://127.0.0.1:5000) no navegador.
+```text
+http://127.0.0.1:5000
+```
 
-    4. Efetue o login inicial com as credenciais padrão do banco:
+## Configuração principal
 
-        * Usuário: admin
+O projeto usa `.env` e inclui o exemplo `exeplo.env`.
 
-        * Senha: admin123
+Variáveis principais:
+
+- `BASE_URL`
+- `WEB_HOST`
+- `WEB_PORT`
+- `MAX_CHANNELS_PER_FILE`
+- `CONCURRENCY_LIMIT`
+- `REQUEST_TIMEOUT`
+- `REMOTE_M3U_URLS`
+- `SCHEDULE_MODE`
+- `API_TOKEN`
+- `SECRET_KEY`
+
+## Login, usuários e recuperação
+
+Mais detalhes em:
+
+- [docs/acesso-e-recuperacao.md](docs/acesso-e-recuperacao.md)
+
+## Documentação detalhada
+
+- [docs/arquitetura.md](docs/arquitetura.md)
+- [docs/instalacao.md](docs/instalacao.md)
+- [docs/configuracao.md](docs/configuracao.md)
+- [docs/troubleshooting.md](docs/troubleshooting.md)
+- [docs/acesso-e-recuperacao.md](docs/acesso-e-recuperacao.md)
+
+## Como rodar em produção
+
+- configure `BASE_URL` correto
+- configure `WEB_HOST=0.0.0.0`
+- use HTTPS em reverse proxy
+- proteja `.env` e o banco SQLite
+- mantenha o sistema atualizado com backup regular
+
+## Possíveis erros e solução
+
+Para problemas comuns, consulte:
+
+- [docs/troubleshooting.md](docs/troubleshooting.md)
+
+## Observações importantes
+
+- O build do frontend precisa existir em `frontend/react/dist`
+- a aplicação usa o `SQLite` em `data/app.db`
+- os links exportados usam a URL pública configurada em `BASE_URL`
+- o `admin` padrão deve ser trocado imediatamente em ambientes reais
+
+## Exemplos de uso da API
+
+### Status do sistema
+
+```bash
+curl http://127.0.0.1:5000/api/status
+```
+
+### Iniciar sincronização
+
+```bash
+curl -X POST http://127.0.0.1:5000/api/v1/sync
+```
+
+### Consultar playlists
+
+```bash
+curl http://127.0.0.1:5000/api/v1/playlists
+```
+
+## Resumo
+
+Este projeto foi pensado para operar como um processador IPTV completo: ingestão, validação, classificação, geração de listas, publicação e gestão de usuários e configurações.
+
+Se quiser, o próximo passo pode ser criar também um guia de uso específico para:
+
+- usuário admin
+- usuário editor
+- usuário viewer
+- operação em Docker em produção
+- backup e restauração do banco SQLite
+- migração para Linux server/VM
+- configuração de domínio e HTTPS

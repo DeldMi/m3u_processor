@@ -3,6 +3,7 @@ import tempfile
 import unittest
 
 from src.db import Database
+from src.auth import ROUTE_METHOD_PERMISSIONS, _route_permission
 from src.domains.authz.service import ensure_schema, has_permission, public_user, create_user, update_user
 
 
@@ -53,6 +54,14 @@ class AuthorizationTests(unittest.TestCase):
         updated = update_user(self.db, created["id"], {"display_name": "Conta desativada", "active": False})
         self.assertEqual(updated["display_name"], "Conta desativada")
         self.assertFalse(updated["active"])
+
+    def test_user_management_uses_create_permission_for_post(self):
+        self.assertEqual(ROUTE_METHOD_PERMISSIONS["api_users"]["GET"], ("users", "view"))
+        self.assertEqual(ROUTE_METHOD_PERMISSIONS["api_users"]["POST"], ("users", "create"))
+
+    def test_route_permission_fails_closed_for_unknown_method(self):
+        # A chamada fora da matriz explícita não deve herdar a permissão de GET.
+        self.assertIsNone(ROUTE_METHOD_PERMISSIONS["api_users"].get("DELETE"))
 
 
 if __name__ == "__main__":

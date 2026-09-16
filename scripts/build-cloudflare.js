@@ -6,7 +6,7 @@ const ROOT = path.resolve(__dirname, '..');
 const FRONTEND = path.join(ROOT, 'frontend', 'react');
 const DIST = path.join(FRONTEND, 'dist');
 const isWindows = process.platform === 'win32';
-const npmCommand = isWindows ? 'npm.cmd' : 'npm';
+const npmCommand = 'npm';
 const bunCommand = isWindows ? 'bun.exe' : 'bun';
 
 function executableExists(command) {
@@ -21,7 +21,19 @@ function executableExists(command) {
 
 function run(command, args, label, cwd = ROOT) {
     console.log(`\n==> ${label}`);
-    const result = spawnSync(command, args, {
+    let executable = command;
+    let spawnArgs = args;
+
+    // Windows registra npm como npm.cmd. O Node não consegue executar um .cmd
+    // com shell:false de forma portável (EINVAL em algumas versões). Para
+    // evitar o EINVAL, usamos o próprio cmd.exe apenas para o script npm,
+    // mantendo shell:false no processo Node.
+    if (isWindows && command === 'npm') {
+        executable = process.env.ComSpec || 'cmd.exe';
+        spawnArgs = ['/d', '/s', '/c', `npm.cmd ${args.join(' ')}`];
+    }
+
+    const result = spawnSync(executable, spawnArgs, {
         cwd,
         stdio: 'inherit',
         shell: false,

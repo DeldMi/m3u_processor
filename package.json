@@ -9,13 +9,13 @@
         "setup": "node ./scripts/setup.js",
         "dev": "node ./scripts/run-dev.js",
         "start": "node ./scripts/run-prod.js",
-        "build": "npm --prefix frontend/react run build",
+        "build": "node ./scripts/typecheck.js",
         "docker:up": "docker compose up --build -d",
         "docker:down": "docker compose down",
         "docker:logs": "docker compose logs -f",
         "open": "node ./scripts/open.js",
         "verify": "node ./scripts/verify.js",
-        "test": "python -m unittest discover -s tests -v",
-        "typecheck": "npm --prefix frontend/react run build"
+        "test": "node ./scripts/test.js",
+        "typecheck": "node ./scripts/typecheck.js"
     }
 }

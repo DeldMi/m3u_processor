@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bell, CheckCircle2, Info, TriangleAlert, X, XCircle, Trash2 } from "lucide-react";
 import { api } from "../services/api";
 
@@ -22,9 +22,7 @@ function readIds(key: string): Set<string> {
     try {
         const raw = JSON.parse(localStorage.getItem(key) || "[]");
         return new Set(Array.isArray(raw) ? raw.map(String).slice(-500) : []);
-    } catch {
-        return new Set();
-    }
+    } catch { return new Set(); }
 }
 
 function saveIds(key: string, ids: Set<string>) {
@@ -62,7 +60,6 @@ export function Notifications() {
             const response = await api<Notice[]>("/api/v1/notifications");
             const normalized = response.map((item) => ({ ...item, id: noticeId(item) }));
             setItems(normalized);
-
             const incoming = normalized.filter((item) => !seen.current.has(item.id) && !cleared.current.has(item.id));
             if (!initialized.current) {
                 // O histórico existente nunca vira toast ao trocar/recarregar de página.
@@ -89,17 +86,24 @@ export function Notifications() {
         };
     }, []);
 
-    const visibleItems = useMemo(() => items.filter((item) => !cleared.current.has(item.id)), [items]);
-    const unread = visibleItems.filter((item) => !seen.current.has(item.id)).length;
-    const toastItems = toastIds.map((id) => items.find((item) => item.id === id)).filter(Boolean) as Notice[];
-
+    const visibleItems = items.filter((item) => !cleared.current.has(item.id));
     const clearAll = () => {
         visibleItems.forEach((item) => cleared.current.add(item.id));
         saveIds(STORAGE_CLEARED, cleared.current);
-        toastItems.forEach((item) => dismissToast(item.id));
+        toastIds.forEach((id) => dismissToast(id));
         setExpanded(null);
         setItems((old) => old.filter((item) => !cleared.current.has(item.id)));
     };
+
+    const closeOne = (id: string) => {
+        cleared.current.add(id);
+        saveIds(STORAGE_CLEARED, cleared.current);
+        dismissToast(id);
+        setExpanded((value) => value === id ? null : value);
+        setItems((old) => old.filter((item) => item.id !== id));
+    };
+
+    const toastItems = toastIds.map((id) => items.find((item) => item.id === id)).filter(Boolean) as Notice[];
 
     return <>
         <div className="notification-center" onMouseLeave={() => setOpen(false)}>
@@ -130,7 +134,7 @@ export function Notifications() {
                                     {item.details && <span><b>Detalhes:</b> {item.details}</span>}
                                 </div>}
                             </div>
-                            <button className="notification-close" aria-label="Fechar aviso" onClick={(event) => { event.stopPropagation(); dismissToast(item.id); }}><X size={14} /></button>
+                            <button className="notification-close" aria-label="Fechar notificação" onClick={(event) => { event.stopPropagation(); closeOne(item.id); }}><X size={14} /></button>
                         </article>;
                     })}
                 </div>

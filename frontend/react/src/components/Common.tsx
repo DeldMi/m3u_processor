@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Boxes, LayoutDashboard, ListVideo, LogOut, Menu, MoreVertical, Power, RotateCcw, Save, Settings, ShieldCheck, UserRound, Users, X, Zap } from "lucide-react";
 import { api } from "../services/api";
 import type { PermissionAction, User } from "../types";
+import { Notifications } from "./Notifications";
 
 export const hasPermission = (user: User, resource: string, action: PermissionAction) => {
     if (user.role === "admin") return true;
@@ -38,6 +39,7 @@ export function Shell({ user, children }: { user: User; children: React.ReactNod
                 <header className="topbar">
                     <div><span className="kicker">CENTRO DE OPERAÇÕES</span><p>Olá, {user.display_name || user.username}</p></div>
                     <div className="account-actions">
+                        <Notifications />
                         <button className="account-button" onClick={() => setProfileOpen(true)} title="Editar perfil"><UserRound size={15} /> {user.username}</button>
                         {hasPermission(user, "system", "admin") && <div className="admin-menu-wrap">
                             <button className="icon-button" onClick={() => setAdminOpen(!adminOpen)} title="Opções administrativas"><MoreVertical size={18} /></button>

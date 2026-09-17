@@ -1,7 +1,7 @@
 name = "m3u-processor"
 compatibility_date = "2026-09-16"
 pages_build_output_dir = "frontend/react/dist"
-BACKEND_ORIGIN = "https://api-m3u-processor.a3gs.com.br"
+# BACKEND_ORIGIN = "https://api-m3u-processor.a3gs.com.br"
 
 # O backend Flask/Python não é executado no Pages. Configure a origem pública
 # do backend como variável BACKEND_ORIGIN nas Pages Functions.

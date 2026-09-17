@@ -10,6 +10,8 @@ import time
 from collections import deque
 from typing import Any, Callable
 
+from src.domains.health.internet import check_internet_health
+
 
 class PipelineInterrupted(Exception):
     """Sinaliza cancelamento solicitado pelo usuário."""
@@ -45,7 +47,6 @@ def _apply_publication_policy(output_dir: str, backup_dir: str, previous: dict[s
         path = os.path.join(output_dir, name)
         if os.path.isfile(path):
             os.remove(path)
-
     for name, source in previous.items():
         shutil.copy2(source, os.path.join(output_dir, name))
 
@@ -55,7 +56,6 @@ def _apply_publication_policy(output_dir: str, backup_dir: str, previous: dict[s
         allowed = [name for name in generated if name in previous]
     else:
         allowed = list(generated)
-
     for name in allowed:
         shutil.copy2(generated[name], os.path.join(output_dir, name))
 
@@ -153,8 +153,14 @@ def execute_pipeline(*, manager: Any, process_state: dict[str, Any], process_log
 
 
 def execute_health_check(*, manager: Any, process_state: dict[str, Any], pipeline_lock: threading.Lock) -> None:
-    """Atualiza a saúde dos canais sem regenerar playlists."""
+    """Atualiza a saúde dos canais somente quando a Internet está disponível."""
     if pipeline_lock.locked() or shutil.disk_usage(manager.base_dir).free < 512 * 1024 * 1024:
+        return
+    internet = check_internet_health(manager.config_mgr.get_all())
+    process_state["internet_online"] = bool(internet.get("online"))
+    process_state["internet_latency_ms"] = internet.get("latency_ms", 0)
+    if not internet.get("online"):
+        process_state["ultimo_log"] = "Verificação de canais não executada: Internet indisponível."
         return
     try:
         result = asyncio.run(manager.refresh_channel_health())

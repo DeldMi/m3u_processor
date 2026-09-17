@@ -16,8 +16,8 @@ jobs:
         uses: actions/checkout@v4
       - name: Install Python dependencies
         run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt && python -m pip install 'psutil>=7.2.2'
-      - name: Apply changes
-        run: python scripts/apply_observability.py
+      - name: Apply backend and dashboard changes
+        run: python scripts/apply_observability.py && python scripts/fix_observability_ts.py
       - name: Validate Python
         run: python -m compileall -q src tests && python -m unittest discover -s tests -v
       - name: Build frontend

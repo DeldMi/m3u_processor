@@ -10,7 +10,6 @@ import { SettingsPage } from "../features/settings/SettingsPage";
 import { ResourceSettingsPage } from "../features/settings/ResourceSettingsPage";
 import { UsersPage } from "../features/users/UsersPage";
 import { Player } from "../features/player/Player";
-import { Notifications } from "../components/Notifications";
 
 const ROUTES = {
     "/": ["dashboard", "view"],
@@ -44,5 +43,5 @@ export function App() {
     if (path === "/settings") content = <SettingsPage />;
     if (path === "/settings/resources") content = <ResourceSettingsPage />;
     if (path === "/users") content = <UsersPage user={user} />;
-    return <Shell user={user}>{content}<Player /><Notifications /></Shell>;
+    return <Shell user={user}>{content}<Player /></Shell>;
 }

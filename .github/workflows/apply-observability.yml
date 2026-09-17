@@ -21,7 +21,7 @@ jobs:
       - name: Validate Python
         run: python -m compileall -q src tests && python -m unittest discover -s tests -v
       - name: Build frontend
-        run: npm --prefix frontend/react ci && npm --prefix frontend/react run build
+        run: npm --prefix frontend/react install && npm --prefix frontend/react run build
       - name: Commit changes
         run: |
           git config user.name "github-actions[bot]"

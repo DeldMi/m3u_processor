@@ -4,84 +4,26 @@ import { api } from "../services/api";
 import type { PermissionAction, User } from "../types";
 import { Notifications } from "./Notifications";
 
-export const hasPermission = (user: User, resource: string, action: PermissionAction) => {
-    if (user.role === "admin") return true;
-    return Boolean(user.permissions?.[resource]?.includes(action));
-};
+export const hasPermission = (user: User, resource: string, action: PermissionAction) => user.role === "admin" || Boolean(user.permissions?.[resource]?.includes(action));
 export const canEdit = (user: User) => hasPermission(user, "channels", "edit");
 export const nav = [
-    { path: "/", label: "Painel geral", icon: LayoutDashboard, resource: "dashboard" },
-    { path: "/channels", label: "Canais e editor", icon: Boxes, resource: "channels" },
-    { path: "/playlists", label: "Listas publicadas", icon: ListVideo, resource: "playlists" },
-    { path: "/users", label: "Usuários", icon: Users, resource: "users" },
-    { path: "/settings", label: "Configurações", icon: Settings, resource: "settings" },
+ { path:"/",label:"Painel geral",icon:LayoutDashboard,resource:"dashboard" },
+ { path:"/channels",label:"Canais e editor",icon:Boxes,resource:"channels" },
+ { path:"/playlists",label:"Listas publicadas",icon:ListVideo,resource:"playlists" },
+ { path:"/users",label:"Usuários",icon:Users,resource:"users" },
+ { path:"/settings",label:"Configurações",icon:Settings,resource:"settings" },
 ];
 
-export function Shell({ user, children }: { user: User; children: React.ReactNode }) {
-    const [collapsed, setCollapsed] = useState(localStorage.getItem("sidebar-collapsed") === "true");
-    const path = window.location.pathname;
-    const [profileOpen, setProfileOpen] = useState(false);
-    const [adminOpen, setAdminOpen] = useState(false);
-    return (
-        <div className={`app-shell ${collapsed ? "is-collapsed" : ""}`}>
-            <aside className="sidebar">
-                <div className="brand"><span className="brand-mark">M3</span><span className="brand-name">M3U ARCHITECT</span></div>
-                <button className="icon-button sidebar-toggle" onClick={() => { setCollapsed(!collapsed); localStorage.setItem("sidebar-collapsed", String(!collapsed)); }} title="Recolher menu"><Menu size={18} /></button>
-                <nav>
-                    {nav.filter((n) => hasPermission(user, n.resource, "view")).map((n) => {
-                        const Icon = n.icon;
-                        return <a className={path === n.path ? "active" : ""} href={n.path} key={n.path}><Icon size={18} /><span>{n.label}</span></a>;
-                    })}
-                </nav>
-                <a className="logout" href="/logout"><LogOut size={17} /><span>Sair</span></a>
-            </aside>
-            <main className="main-content">
-                <header className="topbar">
-                    <div><span className="kicker">CENTRO DE OPERAÇÕES</span><p>Olá, {user.display_name || user.username}</p></div>
-                    <div className="account-actions">
-                        <Notifications />
-                        <button className="account-button" onClick={() => setProfileOpen(true)} title="Editar perfil"><UserRound size={15} /> {user.username}</button>
-                        {hasPermission(user, "system", "admin") && <div className="admin-menu-wrap">
-                            <button className="icon-button" onClick={() => setAdminOpen(!adminOpen)} title="Opções administrativas"><MoreVertical size={18} /></button>
-                            {adminOpen && <div className="admin-menu">
-                                <button onClick={() => api("/api/admin/restart", { method: "POST" }).then(() => setTimeout(() => window.location.reload(), 1200))}><RotateCcw size={15} /> Reiniciar servidor</button>
-                                <button onClick={() => confirm("Desligar o servidor agora?") && api("/api/admin/shutdown", { method: "POST" })}><Power size={15} /> Desligar servidor</button>
-                                <button onClick={() => setProfileOpen(true)}><UserRound size={15} /> Editar perfil</button>
-                            </div>}
-                        </div>}
-                        <span className="role-chip"><ShieldCheck size={14} /> {user.role}</span>
-                    </div>
-                </header>
-                {children}
-            </main>
-            {profileOpen && <ProfileModal user={user} close={() => setProfileOpen(false)} />}
-        </div>
-    );
+export function Shell({user,children}:{user:User;children:React.ReactNode}){
+ const [collapsed,setCollapsed]=useState(localStorage.getItem("sidebar-collapsed")==="true"),[profileOpen,setProfileOpen]=useState(false),[adminOpen,setAdminOpen]=useState(false);
+ const path=window.location.pathname;
+ return <div className={`app-shell ${collapsed?"is-collapsed":""}`}><aside className="sidebar"><div className="brand"><span className="brand-mark">M3</span><span className="brand-name">M3U ARCHITECT</span></div><button className="icon-button sidebar-toggle" onClick={()=>{setCollapsed(!collapsed);localStorage.setItem("sidebar-collapsed",String(!collapsed))}} title="Recolher menu"><Menu size={18}/></button><nav>{nav.filter(n=>hasPermission(user,n.resource,"view")).map(n=>{const Icon=n.icon;return <a className={path===n.path?"active":""} href={n.path} key={n.path}><Icon size={18}/><span>{n.label}</span></a>})}</nav><a className="logout" href="/logout"><LogOut size={17}/><span>Sair</span></a></aside><main className="main-content"><header className="topbar"><div><span className="kicker">CENTRO DE OPERAÇÕES</span><p>Olá, {user.display_name||user.username}</p></div><div className="account-actions"><button className="account-button" onClick={()=>setProfileOpen(true)} title="Editar perfil"><UserRound size={15}/>{user.username}</button><Notifications/>{hasPermission(user,"system","admin")&&<div className="admin-menu-wrap"><button className="icon-button" onClick={()=>setAdminOpen(!adminOpen)} title="Opções administrativas"><MoreVertical size={18}/></button>{adminOpen&&<div className="admin-menu"><button onClick={()=>api("/api/admin/restart",{method:"POST"}).then(()=>setTimeout(()=>window.location.reload(),1200))}><RotateCcw size={15}/>Reiniciar servidor</button><button onClick={()=>confirm("Desligar o servidor agora?")&&api("/api/admin/shutdown",{method:"POST"})}><Power size={15}/>Desligar servidor</button><button onClick={()=>setProfileOpen(true)}><UserRound size={15}/>Editar perfil</button></div>}</div>}<span className="role-chip"><ShieldCheck size={14}/>{user.role}</span></div></header>{children}</main>{profileOpen&&<ProfileModal user={user} close={()=>setProfileOpen(false)}/>}</div>;
 }
-
-export function ProfileModal({ user, close }: { user: User; close: () => void }) {
-    const [form, setForm] = useState({ username: user.username, password: "" });
-    const save = () => api("/api/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) }).then(() => { close(); window.location.reload(); }).catch(() => alert("Não foi possível atualizar o perfil."));
-    return <Modal title="Editar perfil" close={close}><label>Nome de usuário<input value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} /></label><label>Nova senha<input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="Opcional" /></label><div className="modal-actions"><button className="button subtle" onClick={close}>Cancelar</button><button className="button primary" onClick={save}><Save size={15} /> Salvar perfil</button></div></Modal>;
-}
-
-export function Login() {
-    return <main className="login-screen"><form className="login-card" method="post" action="/login"><span className="brand-mark">M3</span><p className="kicker">M3U ARCHITECT</p><h1>Controle sua grade.</h1><p className="muted">Auditoria, conectividade e distribuição em um só lugar.</p><label>Usuário<input name="username" required autoFocus /></label><label>Senha<input name="password" type="password" required /></label><button className="button primary full"><Zap size={16} /> Entrar no sistema</button></form></main>;
-}
-
-export function Header({ kicker, title, description, children }: { kicker: string; title: string; description: string; children?: React.ReactNode }) {
-    return <header className="page-heading"><div><span className="kicker">{kicker}</span><h1>{title}</h1><p>{description}</p></div>{children}</header>;
-}
-export function PanelTitle({ kicker, title, badge }: { kicker: string; title: string; badge?: string }) {
-    return <div className="panel-title"><div><span className="kicker">{kicker}</span><h2>{title}</h2></div>{badge && <span className="panel-badge">{badge}</span>}</div>;
-}
-export function Empty({ text }: { text: string }) { return <div className="empty">{text}</div>; }
-export function Modal({ title, children, close }: { title: string; children: React.ReactNode; close: () => void }) {
-    return <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}><div className="modal"><button className="icon-button modal-close" onClick={close}><X size={18} /></button><h2>{title}</h2>{children}</div></div>;
-}
-export function Metric({ label, value, detail, tone }: { label: string; value: string | number; detail: string; tone: string }) {
-    return <article className={`metric metric-${tone}`}><span>{label}</span><strong>{value}</strong><small>{detail}</small></article>;
-}
-export function Legend({ label, value, color }: { label: string; value: number; color: string }) {
-    return <div className="legend-row"><i className={`dot ${color}`} /><span>{label}</span><b>{value}</b></div>;
-}
+export function ProfileModal({user,close}:{user:User;close:()=>void}){const [form,setForm]=useState({username:user.username,password:""});const save=()=>api("/api/profile",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(form)}).then(()=>{close();window.location.reload()}).catch(()=>alert("Não foi possível atualizar o perfil."));return <Modal title="Editar perfil" close={close}><label>Nome de usuário<input value={form.username} onChange={e=>setForm({...form,username:e.target.value})}/></label><label>Nova senha<input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Opcional"/></label><div className="modal-actions"><button className="button subtle" onClick={close}>Cancelar</button><button className="button primary" onClick={save}><Save size={15}/>Salvar perfil</button></div></Modal>}
+export function Login(){return <main className="login-screen"><form className="login-card" method="post" action="/login"><span className="brand-mark">M3</span><p className="kicker">M3U ARCHITECT</p><h1>Controle sua grade.</h1><p className="muted">Auditoria, conectividade e distribuição em um só lugar.</p><label>Usuário<input name="username" required autoFocus/></label><label>Senha<input name="password" type="password" required/></label><button className="button primary full"><Zap size={16}/>Entrar no sistema</button></form></main>}
+export function Header({kicker,title,description,children}:{kicker:string;title:string;description:string;children?:React.ReactNode}){return <header className="page-heading"><div><span className="kicker">{kicker}</span><h1>{title}</h1><p>{description}</p></div>{children}</header>}
+export function PanelTitle({kicker,title,badge}:{kicker:string;title:string;badge?:string}){return <div className="panel-title"><div><span className="kicker">{kicker}</span><h2>{title}</h2></div>{badge&&<span className="panel-badge">{badge}</span>}</div>}
+export function Empty({text}:{text:string}){return <div className="empty">{text}</div>}
+export function Modal({title,children,close}:{title:string;children:React.ReactNode;close:()=>void}){return <div className="modal-backdrop" onMouseDown={e=>e.target===e.currentTarget&&close()}><div className="modal"><button className="icon-button modal-close" onClick={close}><X size={18}/></button><h2>{title}</h2>{children}</div></div>}
+export function Metric({label,value,detail,tone}:{label:string;value:string|number;detail:string;tone:string}){return <article className={`metric metric-${tone}`}><span>{label}</span><strong>{value}</strong><small>{detail}</small></article>}
+export function Legend({label,value,color}:{label:string;value:number;color:string}){return <div className="legend-row"><i className={`dot ${color}`}/><span>{label}</span><b>{value}</b></div>}

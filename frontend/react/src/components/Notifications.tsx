@@ -2,155 +2,36 @@ import { useEffect, useRef, useState } from "react";
 import { Bell, CheckCircle2, Info, TriangleAlert, X, XCircle, Trash2 } from "lucide-react";
 import { api } from "../services/api";
 
-type Notice = {
-    id: string;
-    level: "success" | "info" | "warning" | "error";
-    title: string;
-    message: string;
-    timestamp: string;
-    source?: string;
-    path?: string;
-    details?: string;
-};
+type Notice = { id:string; level:"success"|"info"|"warning"|"error"; title:string; message:string; timestamp:string; source?:string; path?:string; details?:string };
+const icons = { success: CheckCircle2, info: Info, warning: TriangleAlert, error: XCircle };
+const TTL = 7000;
+const SEEN = "m3u-notifications-seen-v3";
+const CLEARED = "m3u-notifications-cleared-v3";
+const ids = (key:string) => { try { const v=JSON.parse(localStorage.getItem(key)||"[]"); return new Set(Array.isArray(v)?v.map(String).slice(-500):[]); } catch { return new Set<string>(); } };
+const saveIds = (key:string,v:Set<string>) => { try { localStorage.setItem(key,JSON.stringify([...v].slice(-500))); } catch {} };
+const nid = (n:Partial<Notice>) => String(n.id || `${n.timestamp||""}|${n.level||"info"}|${n.title||""}|${n.message||""}`);
 
-const icon = { success: CheckCircle2, info: Info, warning: TriangleAlert, error: XCircle };
-const TOAST_TTL = 7000;
-const STORAGE_SEEN = "m3u-notifications-seen-v2";
-const STORAGE_CLEARED = "m3u-notifications-cleared-v2";
-
-function readIds(key: string): Set<string> {
-    try {
-        const raw = JSON.parse(localStorage.getItem(key) || "[]");
-        return new Set(Array.isArray(raw) ? raw.map(String).slice(-500) : []);
-    } catch { return new Set(); }
-}
-
-function saveIds(key: string, ids: Set<string>) {
-    try { localStorage.setItem(key, JSON.stringify(Array.from(ids).slice(-500))); } catch { /* storage unavailable */ }
-}
-
-function noticeId(item: Partial<Notice>) {
-    return String(item.id || `${item.timestamp || ""}|${item.level || "info"}|${item.title || ""}|${item.message || ""}`);
-}
-
-export function Notifications() {
-    const [items, setItems] = useState<Notice[]>([]);
-    const [open, setOpen] = useState(false);
-    const [expanded, setExpanded] = useState<string | null>(null);
-    const [toastIds, setToastIds] = useState<string[]>([]);
-    const [paused, setPaused] = useState<Record<string, boolean>>({});
-    const timers = useRef<Record<string, number>>({});
-    const initialized = useRef(false);
-    const seen = useRef<Set<string>>(readIds(STORAGE_SEEN));
-    const cleared = useRef<Set<string>>(readIds(STORAGE_CLEARED));
-
-    const dismissToast = (id: string) => {
-        window.clearTimeout(timers.current[id]);
-        delete timers.current[id];
-        setToastIds((old) => old.filter((value) => value !== id));
-    };
-
-    const scheduleToast = (id: string) => {
-        window.clearTimeout(timers.current[id]);
-        timers.current[id] = window.setTimeout(() => dismissToast(id), TOAST_TTL);
-    };
-
-    const load = async () => {
-        try {
-            const response = await api<Notice[]>("/api/v1/notifications");
-            const normalized = response.map((item) => ({ ...item, id: noticeId(item) }));
-            setItems(normalized);
-            const incoming = normalized.filter((item) => !seen.current.has(item.id) && !cleared.current.has(item.id));
-            if (!initialized.current) {
-                // O histórico existente nunca vira toast ao trocar/recarregar de página.
-                normalized.forEach((item) => seen.current.add(item.id));
-                saveIds(STORAGE_SEEN, seen.current);
-                initialized.current = true;
-            } else if (incoming.length) {
-                incoming.forEach((item) => seen.current.add(item.id));
-                saveIds(STORAGE_SEEN, seen.current);
-                setToastIds((old) => Array.from(new Set([...incoming.map((item) => item.id), ...old])).slice(0, 6));
-                incoming.slice(0, 6).forEach((item) => scheduleToast(item.id));
-            }
-        } catch {
-            // Falhas de consulta não criam uma falsa notificação.
-        }
-    };
-
-    useEffect(() => {
-        void load();
-        const poll = window.setInterval(() => void load(), 3000);
-        return () => {
-            window.clearInterval(poll);
-            Object.values(timers.current).forEach(window.clearTimeout);
-        };
-    }, []);
-
-    const visibleItems = items.filter((item) => !cleared.current.has(item.id));
-    const clearAll = () => {
-        visibleItems.forEach((item) => cleared.current.add(item.id));
-        saveIds(STORAGE_CLEARED, cleared.current);
-        toastIds.forEach((id) => dismissToast(id));
-        setExpanded(null);
-        setItems((old) => old.filter((item) => !cleared.current.has(item.id)));
-    };
-
-    const closeOne = (id: string) => {
-        cleared.current.add(id);
-        saveIds(STORAGE_CLEARED, cleared.current);
-        dismissToast(id);
-        setExpanded((value) => value === id ? null : value);
-        setItems((old) => old.filter((item) => item.id !== id));
-    };
-
-    const toastItems = toastIds.map((id) => items.find((item) => item.id === id)).filter(Boolean) as Notice[];
-
-    return <>
-        <div className="notification-center" onMouseLeave={() => setOpen(false)}>
-            <button className={`notification-bell ${open ? "active" : ""}`} onClick={() => setOpen((value) => !value)} title="Notificações" aria-label="Abrir notificações" aria-expanded={open}>
-                <Bell size={18} />
-                {visibleItems.length > 0 && <span className="notification-badge">{visibleItems.length > 99 ? "99+" : visibleItems.length}</span>}
-            </button>
-            {open && <section className="notification-panel" aria-label="Central de notificações">
-                <div className="notification-panel-head">
-                    <div><strong>Notificações</strong><small>{visibleItems.length ? `${visibleItems.length} registro(s)` : "Nenhuma notificação"}</small></div>
-                    {visibleItems.length > 0 && <button className="notification-clear" onClick={clearAll} title="Limpar histórico"><Trash2 size={14} /> Limpar</button>}
-                </div>
-                <div className="notification-list">
-                    {visibleItems.length === 0 && <div className="notification-empty"><Bell size={20} /><span>Nenhuma notificação registrada.</span></div>}
-                    {visibleItems.map((item) => {
-                        const Icon = icon[item.level] || Info;
-                        const isExpanded = expanded === item.id;
-                        return <article key={item.id} className={`notification-history ${item.level} ${isExpanded ? "expanded" : ""}`} onClick={() => setExpanded(isExpanded ? null : item.id)}>
-                            <Icon size={17} />
-                            <div className="notification-history-body">
-                                <strong>{item.title}</strong>
-                                <p>{item.message}</p>
-                                <small>{new Date(item.timestamp).toLocaleString()} {item.source ? `• ${item.source}` : ""}</small>
-                                {isExpanded && <div className="notification-details">
-                                    <span><b>Quando:</b> {new Date(item.timestamp).toLocaleString()}</span>
-                                    <span><b>Origem:</b> {item.source || "Execução do sistema"}</span>
-                                    {item.path && <span><b>Local:</b> {item.path}</span>}
-                                    {item.details && <span><b>Detalhes:</b> {item.details}</span>}
-                                </div>}
-                            </div>
-                            <button className="notification-close" aria-label="Fechar notificação" onClick={(event) => { event.stopPropagation(); closeOne(item.id); }}><X size={14} /></button>
-                        </article>;
-                    })}
-                </div>
-            </section>}
-        </div>
-
-        <div className="notification-toasts" aria-live="polite">
-            {toastItems.map((item) => {
-                const Icon = icon[item.level] || Info;
-                return <article key={item.id} className={`notification-toast ${item.level}`} onMouseEnter={() => { window.clearTimeout(timers.current[item.id]); setPaused((old) => ({ ...old, [item.id]: true })); }} onMouseLeave={() => { setPaused((old) => ({ ...old, [item.id]: false })); scheduleToast(item.id); }}>
-                    <Icon size={18} />
-                    <div><strong>{item.title}</strong><p>{item.message}</p><small>{new Date(item.timestamp).toLocaleTimeString()}</small></div>
-                    <button aria-label="Fechar aviso" onClick={() => dismissToast(item.id)}><X size={14} /></button>
-                    <span className={`notification-timer ${paused[item.id] ? "paused" : ""}`} />
-                </article>;
-            })}
-        </div>
-    </>;
+export function Notifications(){
+ const [items,setItems]=useState<Notice[]>([]),[open,setOpen]=useState(false),[expanded,setExpanded]=useState<string|null>(null),[toastIds,setToastIds]=useState<string[]>([]),[paused,setPaused]=useState<Record<string,boolean>>({});
+ const timers=useRef<Record<string,number>>({}), closeTimer=useRef<number|undefined>(), initialized=useRef(false), seen=useRef(ids(SEEN)), cleared=useRef(ids(CLEARED));
+ const dismiss=(id:string)=>{clearTimeout(timers.current[id]);delete timers.current[id];setToastIds(v=>v.filter(x=>x!==id));};
+ const schedule=(id:string)=>{clearTimeout(timers.current[id]);timers.current[id]=window.setTimeout(()=>dismiss(id),TTL);};
+ const load=async()=>{try{const response=await api<Notice[]>("/api/v1/notifications"), normalized=response.map(n=>({...n,id:nid(n)}));setItems(normalized);const incoming=normalized.filter(n=>!seen.current.has(n.id)&&!cleared.current.has(n.id));if(!initialized.current){normalized.forEach(n=>seen.current.add(n.id));saveIds(SEEN,seen.current);initialized.current=true;}else if(incoming.length){incoming.forEach(n=>seen.current.add(n.id));saveIds(SEEN,seen.current);setToastIds(v=>[...new Set([...incoming.map(n=>n.id),...v])].slice(0,6));incoming.slice(0,6).forEach(n=>schedule(n.id));}}catch{}};
+ useEffect(()=>{void load();const poll=window.setInterval(()=>void load(),3000);return()=>{clearInterval(poll);Object.values(timers.current).forEach(clearTimeout);clearTimeout(closeTimer.current);};},[]);
+ const visible=items.filter(n=>!cleared.current.has(n.id));
+ const closeLater=()=>{clearTimeout(closeTimer.current);closeTimer.current=window.setTimeout(()=>setOpen(false),220);};
+ const keepOpen=()=>clearTimeout(closeTimer.current);
+ const clearAll=()=>{visible.forEach(n=>cleared.current.add(n.id));saveIds(CLEARED,cleared.current);toastIds.forEach(dismiss);setItems(v=>v.filter(n=>!cleared.current.has(n.id)));setExpanded(null);};
+ const closeOne=(id:string)=>{cleared.current.add(id);saveIds(CLEARED,cleared.current);dismiss(id);setItems(v=>v.filter(n=>n.id!==id));setExpanded(v=>v===id?null:v);};
+ const toasts=toastIds.map(id=>items.find(n=>n.id===id)).filter(Boolean) as Notice[];
+ return <>
+  <div className="notification-center" onMouseEnter={keepOpen} onMouseLeave={closeLater}>
+   <button className={`notification-bell ${open?"active":""}`} onClick={()=>{clearTimeout(closeTimer.current);setOpen(v=>!v);}} aria-label="Abrir notificações" aria-expanded={open} title="Notificações"><Bell size={18}/>{visible.length>0&&<span className="notification-badge">{visible.length>99?"99+":visible.length}</span>}</button>
+   {open&&<section className="notification-panel" onMouseEnter={keepOpen} onMouseLeave={closeLater} aria-label="Central de notificações">
+    <div className="notification-panel-head"><div><strong>Notificações</strong><small>{visible.length?`${visible.length} registro(s)`:"Nenhuma notificação"}</small></div>{visible.length>0&&<button className="notification-clear" onClick={clearAll}><Trash2 size={14}/> Limpar</button>}</div>
+    <div className="notification-list">{visible.length===0&&<div className="notification-empty"><Bell size={20}/><span>Nenhuma notificação registrada.</span></div>}{visible.map(item=>{const Icon=icons[item.level]||Info,isExpanded=expanded===item.id;return <article key={item.id} className={`notification-history ${item.level} ${isExpanded?"expanded":""}`} onClick={()=>setExpanded(isExpanded?null:item.id)}><Icon size={17}/><div className="notification-history-body"><strong>{item.title}</strong><p>{item.message}</p><small>{new Date(item.timestamp).toLocaleString()} {item.source?`• ${item.source}`:""}</small>{isExpanded&&<div className="notification-details"><span><b>Quando:</b> {new Date(item.timestamp).toLocaleString()}</span><span><b>Origem:</b> {item.source||"Execução do sistema"}</span>{item.path&&<span><b>Local:</b> {item.path}</span>}{item.details&&<span><b>Detalhes:</b> {item.details}</span>}</div>}</div><button className="notification-close" onClick={e=>{e.stopPropagation();closeOne(item.id)}} aria-label="Fechar notificação"><X size={14}/></button></article>})}</div>
+   </section>}
+  </div>
+  <div className="notification-toasts" aria-live="polite">{toasts.map(item=>{const Icon=icons[item.level]||Info;return <article key={item.id} className={`notification-toast ${item.level}`} onMouseEnter={()=>{clearTimeout(timers.current[item.id]);setPaused(v=>({...v,[item.id]:true}))}} onMouseLeave={()=>{setPaused(v=>({...v,[item.id]:false}));schedule(item.id)}}><Icon size={18}/><div><strong>{item.title}</strong><p>{item.message}</p><small>{new Date(item.timestamp).toLocaleTimeString()}</small></div><button onClick={()=>dismiss(item.id)} aria-label="Fechar aviso"><X size={14}/></button><span className={`notification-timer ${paused[item.id]?"paused":""}`}/></article>})}</div>
+ </>;
 }

@@ -3,6 +3,23 @@ import sqlite3
 from typing import Optional, List, Dict, Any
 from werkzeug.security import generate_password_hash
 
+
+class _ManagedConnection(sqlite3.Connection):
+    """SQLite connection that also closes when leaving a ``with`` block.
+
+    ``sqlite3.Connection.__exit__`` commits/rolls back the transaction, but it
+    does not close the connection. On Windows this can keep ``app.db`` locked
+    until garbage collection, causing temporary-directory test failures and
+    unnecessary RSS growth in long-running processes.
+    """
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            return super().__exit__(exc_type, exc_value, traceback)
+        finally:
+            self.close()
+
+
 class Database:
     def __init__(self, db_path: str):
         self.db_path = db_path
@@ -10,15 +27,15 @@ class Database:
         self.init_schema()
 
     def get_connection(self) -> sqlite3.Connection:
-        # All callers use this connection through ``with``. Do not retain it in
-        # a process-wide list: doing so made every request accumulate objects.
-        conn = sqlite3.connect(self.db_path)
+        # Callers use this connection through ``with``. The managed connection
+        # closes deterministically instead of remaining alive until GC.
+        conn = sqlite3.connect(self.db_path, factory=_ManagedConnection)
         conn.row_factory = sqlite3.Row
         return conn
 
     def close(self):
-        # Kept for compatibility with older callers. Connections are owned by
-        # their ``with`` blocks and therefore close deterministically.
+        # Connections are owned by their ``with`` blocks. Kept for compatibility
+        # with older callers that explicitly call Database.close().
         return None
 
     def __del__(self):

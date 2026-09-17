@@ -22,6 +22,8 @@ from src.domains.playlists.service import get_output_manifests as _get_output_ma
 from src.domains.sync.service import execute_health_check as _execute_health_check
 from src.domains.sync.service import execute_pipeline as _execute_pipeline
 from src.domains.authz.service import create_user as authz_create_user, update_user as authz_update_user, list_public_users, public_user, has_permission
+from src.domains.monitoring.service import ResourceMonitor
+from src.domains.monitoring.routes import register_monitoring_routes
 from src.manager import PlaylistManager
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -39,6 +41,9 @@ PROCESS_LOGS = deque(maxlen=250)
 PAUSE_REQUESTED = threading.Event()
 STOP_REQUESTED = threading.Event()
 ACTIVE_RUN_ID = None
+NOTIFICATIONS = deque(maxlen=100)
+RESOURCE_MONITOR = ResourceMonitor(history_size=120)
+PROCESS_STATE["publication_mode"] = "NONE"
 PIPELINE_LOCK = threading.Lock()
 MIN_FREE_SPACE_BYTES = 512 * 1024 * 1024
 
@@ -56,6 +61,8 @@ def add_process_log(message: str, level: str = "info", run_id=None):
         manager.db.add_process_event(message, level, ACTIVE_RUN_ID if run_id is None else run_id)
     except (OSError, sqlite3.OperationalError):
         pass
+    if level in {"success", "warning", "error"}:
+        NOTIFICATIONS.appendleft({"level": level, "title": "Execução", "message": message, "timestamp": timestamp})
 
 
 def has_sufficient_disk_space() -> bool:
@@ -79,8 +86,9 @@ def execute_health_check():
     return _execute_health_check(manager=manager, process_state=PROCESS_STATE, pipeline_lock=PIPELINE_LOCK)
 
 
-def execute_pipeline():
-    return _execute_pipeline(manager=manager, process_state=PROCESS_STATE, process_logs=PROCESS_LOGS, pause_requested=PAUSE_REQUESTED, stop_requested=STOP_REQUESTED, pipeline_lock=PIPELINE_LOCK, state={"active_run_id": ACTIVE_RUN_ID}, min_free_space_bytes=MIN_FREE_SPACE_BYTES, update_log=add_process_log)
+def execute_pipeline(publication_mode=None):
+    mode = (publication_mode or manager.config_mgr.get_all().get("SYNC_PUBLICATION_MODE", "NONE")).upper()
+    return _execute_pipeline(manager=manager, process_state=PROCESS_STATE, process_logs=PROCESS_LOGS, pause_requested=PAUSE_REQUESTED, stop_requested=STOP_REQUESTED, pipeline_lock=PIPELINE_LOCK, state={"active_run_id": ACTIVE_RUN_ID}, min_free_space_bytes=MIN_FREE_SPACE_BYTES, update_log=add_process_log, publication_mode=mode)
 
 
 def setup_scheduler():
@@ -89,6 +97,8 @@ def setup_scheduler():
 
 if not PUBLIC_ONLY:
     setup_scheduler()
+
+register_monitoring_routes(app, manager, PROCESS_STATE, PROCESS_LOGS, NOTIFICATIONS, RESOURCE_MONITOR)
 
 
 @app.before_request
@@ -415,8 +425,22 @@ def api_toggle_autoremove(ch_id):
 @app.route("/api/v1/sync", methods=["POST"])
 @require_role("editor")
 def api_trigger_sync():
-    if not has_sufficient_disk_space(): return jsonify({"status": "erro", "error": "Espaço em disco insuficiente. Libere espaço e tente novamente."}), 507
-    if PROCESS_STATE["status"] != "Executando..." and not PIPELINE_LOCK.locked(): threading.Thread(target=execute_pipeline, daemon=True).start(); return jsonify({"status": "iniciado"})
+    if not has_sufficient_disk_space():
+        add_process_log("Sincronização bloqueada: espaço em disco insuficiente.", "error")
+        return jsonify({"status": "erro", "error": "Espaço em disco insuficiente. Libere espaço e tente novamente."}), 507
+    internet = check_internet_health()
+    if not internet.get("online"):
+        add_process_log("Sincronização bloqueada: conexão com a Internet indisponível.", "warning")
+        return jsonify({"status": "bloqueado", "error": "Internet indisponível. A sincronização não foi iniciada."}), 503
+    payload = request.get_json(silent=True) or {}
+    mode = str(payload.get("publication_mode") or manager.config_mgr.get_all().get("SYNC_PUBLICATION_MODE", "NONE")).upper()
+    if mode not in {"NONE", "CREATE", "UPDATE", "CREATE_UPDATE"}:
+        return jsonify({"error": "Modo de publicação inválido."}), 400
+    PROCESS_STATE["publication_mode"] = mode
+    if PROCESS_STATE["status"] != "Executando..." and not PIPELINE_LOCK.locked():
+        threading.Thread(target=execute_pipeline, args=(mode,), daemon=True).start()
+        add_process_log(f"Sincronização iniciada. Publicação: {mode}.", "info")
+        return jsonify({"status": "iniciado", "publication_mode": mode})
     return jsonify({"status": "ja_em_execucao"})
 
 
@@ -425,7 +449,7 @@ def api_trigger_sync():
 def api_save_config():
     data = request.json or {}
     for k, v in data.items(): manager.config_mgr.update_key(k, v)
-    setup_scheduler(); return jsonify({"status": "atualizado"})
+    setup_scheduler(); add_process_log("Configurações salvas com sucesso.", "success"); return jsonify({"status": "atualizado"})
 
 
 @app.route("/api/config", methods=["GET"])

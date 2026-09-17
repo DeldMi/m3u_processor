@@ -231,7 +231,7 @@ class PlaylistManager:
         channels = self.db.list_channels()
         return asyncio.run(self._generate_output_partitions(channels, {**profile, "preserve_existing": True}))
 
-    async def sync_and_audit(self, progress_callback=None, control_callback=None) -> Dict[str, Any]:
+    async def sync_and_audit(self, progress_callback=None, control_callback=None, publication_mode: str = "NONE") -> Dict[str, Any]:
         if control_callback:
             control_callback("inicio")
         cfg = self.config_mgr.get_all()
@@ -304,9 +304,17 @@ class PlaylistManager:
             progress_callback("Removendo canais inoperantes do banco...")
         self.db.delete_purged_channels()
 
-        # 4. Particionamento em lotes de no maximo 400 canais
-        # IMPORTANTE: Inclui TODOS os canais operantes (sem descartar por categoria)
+        # 4. Publicação controlada: a auditoria não publica arquivos por padrão.
+        publication_mode = (publication_mode or "NONE").upper()
         active_channels = [c for c in self.db.list_channels() if c["status"] == "online"]
+        if publication_mode == "NONE":
+            if progress_callback:
+                progress_callback("Auditoria concluída sem criar ou atualizar links públicos.")
+            log_path = self.generate_audit_log(total_channels, valid_list, invalid_list, [])
+            return {"total": total_channels, "online": len(valid_list), "offline": len(invalid_list), "partitions": [], "log_file": os.path.basename(log_path), "publication_mode": publication_mode}
+
+        # 5. Particionamento em lotes de no máximo 400 canais.
+        # IMPORTANTE: Inclui TODOS os canais operantes.
 
         if control_callback:
             control_callback("preparando listas")

@@ -26,6 +26,7 @@ def execute_pipeline(
     state: dict[str, Any],
     min_free_space_bytes: int,
     update_log: Callable[[str, str, int | None], None],
+    publication_mode: str = "NONE",
 ) -> None:
     """Executa o pipeline completo sem acoplar a lógica ao Flask."""
     if process_state["status"] == "Executando..." or not pipeline_lock.acquire(blocking=False):
@@ -62,7 +63,7 @@ def execute_pipeline(
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         result = loop.run_until_complete(
-            manager.sync_and_audit(progress_callback=lambda message: update_log(message, "info", active_run_id), control_callback=checkpoint)
+            manager.sync_and_audit(progress_callback=lambda message: update_log(message, "info", active_run_id), control_callback=checkpoint, publication_mode=publication_mode)
         )
 
         process_state["total_canais"] = result.get("total", 0)

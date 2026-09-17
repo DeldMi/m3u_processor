@@ -9,6 +9,7 @@ import { Playlists } from "../features/playlists/PlaylistsPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { UsersPage } from "../features/users/UsersPage";
 import { Player } from "../features/player/Player";
+import { Notifications } from "../components/Notifications";
 
 const ROUTES = {
     "/": ["dashboard", "view"],
@@ -40,5 +41,5 @@ export function App() {
     if (path === "/playlists") content = <Playlists user={user} />;
     if (path === "/settings") content = <SettingsPage />;
     if (path === "/users") content = <UsersPage user={user} />;
-    return <Shell user={user}>{content}<Player /></Shell>;
+    return <Shell user={user}>{content}<Player /><Notifications /></Shell>;
 }

@@ -116,8 +116,11 @@ def auth_login():
         password = request.form.get("password", "")
         with manager.db.get_connection() as conn:
             user = conn.execute("SELECT * FROM users WHERE username = ?;", (username,)).fetchone()
-            if user and user["active"] if "active" in user.keys() else user:
-                if user and check_password_hash(user["password_hash"], password):
+            if user is not None:
+                keys = user.keys()
+                is_active = bool(user["active"]) if "active" in keys else True
+                password_hash = user["password_hash"] if "password_hash" in keys else ""
+                if is_active and password_hash and check_password_hash(password_hash, password):
                     login_user(dict(user))
                     return redirect(url_for("view_dashboard"))
         return render_template("login.html", error="Credenciais invalidas.")

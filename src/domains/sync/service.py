@@ -8,7 +8,6 @@ import tempfile
 import threading
 import time
 from collections import deque
-from datetime import datetime
 from typing import Any, Callable
 
 
@@ -23,7 +22,8 @@ def _publication_snapshot(output_dir: str):
     for name in os.listdir(output_dir):
         source = os.path.join(output_dir, name)
         if os.path.isfile(source):
-            target = os.path.join(backup.name, name)
+            target = os.path.join(backup.name, "previous", name)
+            os.makedirs(os.path.dirname(target), exist_ok=True)
             shutil.copy2(source, target)
             previous[name] = target
     return backup, previous
@@ -32,10 +32,14 @@ def _publication_snapshot(output_dir: str):
 def _apply_publication_policy(output_dir: str, backup_dir: str, previous: dict[str, str], mode: str, generated_names: set[str]) -> None:
     """Restaura a publicação anterior e aplica somente a ação escolhida."""
     generated = {}
+    generated_root = os.path.join(backup_dir, "generated")
+    os.makedirs(generated_root, exist_ok=True)
     for name in generated_names:
         source = os.path.join(output_dir, name)
         if os.path.isfile(source):
-            generated[name] = source
+            target = os.path.join(generated_root, name)
+            shutil.copy2(source, target)
+            generated[name] = target
 
     for name in os.listdir(output_dir):
         path = os.path.join(output_dir, name)
@@ -56,23 +60,10 @@ def _apply_publication_policy(output_dir: str, backup_dir: str, previous: dict[s
         shutil.copy2(generated[name], os.path.join(output_dir, name))
 
 
-def execute_pipeline(
-    *,
-    manager: Any,
-    process_state: dict[str, Any],
-    process_logs: deque,
-    pause_requested: threading.Event,
-    stop_requested: threading.Event,
-    pipeline_lock: threading.Lock,
-    state: dict[str, Any],
-    min_free_space_bytes: int,
-    update_log: Callable[[str, str, int | None], None],
-    publication_mode: str = "NONE",
-) -> None:
+def execute_pipeline(*, manager: Any, process_state: dict[str, Any], process_logs: deque, pause_requested: threading.Event, stop_requested: threading.Event, pipeline_lock: threading.Lock, state: dict[str, Any], min_free_space_bytes: int, update_log: Callable[[str, str, int | None], None], publication_mode: str = "NONE") -> None:
     """Executa o pipeline completo sem acoplar a lógica ao Flask."""
     if process_state["status"] == "Executando..." or not pipeline_lock.acquire(blocking=False):
         return
-
     active_run_id = None
     loop = None
     mode = (publication_mode or "NONE").upper()
@@ -96,7 +87,6 @@ def execute_pipeline(
             process_state["status"] = "Erro"
             process_state["ultimo_log"] = "Espaço em disco insuficiente para executar a sincronização."
             return
-
         stop_requested.clear()
         pause_requested.clear()
         active_run_id = manager.db.start_process_run()
@@ -104,19 +94,12 @@ def execute_pipeline(
         process_state["status"] = "Executando..."
         process_state["publication_mode"] = mode
         update_log(f"Iniciando auditoria completa. Publicação: {mode}.", "info", active_run_id)
-
         if mode in {"CREATE", "UPDATE", "CREATE_UPDATE"}:
             backup_ctx, previous_files = _publication_snapshot(manager.output_dir)
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        result = loop.run_until_complete(
-            manager.sync_and_audit(
-                progress_callback=lambda message: update_log(message, "info", active_run_id),
-                control_callback=checkpoint,
-                publication_mode=mode,
-            )
-        )
+        result = loop.run_until_complete(manager.sync_and_audit(progress_callback=lambda message: update_log(message, "info", active_run_id), control_callback=checkpoint, publication_mode=mode))
 
         if backup_ctx is not None:
             generated_names = {name for manifest in result.get("partitions", []) for name in (manifest.get("m3u_name"), manifest.get("xml_name")) if name}
@@ -132,10 +115,7 @@ def execute_pipeline(
         process_state["canais_offline"] = result.get("offline", 0)
         process_state["manifestos"] = result.get("partitions", [])
         process_state["status"] = "Concluido"
-        process_state["ultimo_log"] = (
-            f"Sucesso! {result.get('online', 0)} canais operantes. "
-            f"{len(result.get('partitions', []))} publicação(ões) aplicadas. Log: {result.get('log_file')}"
-        )
+        process_state["ultimo_log"] = f"Sucesso! {result.get('online', 0)} canais operantes. {len(result.get('partitions', []))} publicação(ões) aplicadas. Log: {result.get('log_file')}"
         update_log(process_state["ultimo_log"], "success", active_run_id)
         manager.db.finish_process_run(active_run_id, "Concluido", result, process_state["ultimo_log"])
     except PipelineInterrupted as exc:

@@ -7,6 +7,7 @@ import { Dashboard } from "../features/dashboard/DashboardPage";
 import { Channels } from "../features/channels/ChannelsPage";
 import { Playlists } from "../features/playlists/PlaylistsPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
+import { ResourceSettingsPage } from "../features/settings/ResourceSettingsPage";
 import { UsersPage } from "../features/users/UsersPage";
 import { Player } from "../features/player/Player";
 import { Notifications } from "../components/Notifications";
@@ -16,6 +17,7 @@ const ROUTES = {
     "/channels": ["channels", "view"],
     "/playlists": ["playlists", "view"],
     "/settings": ["settings", "view"],
+    "/settings/resources": ["settings", "view"],
     "/users": ["users", "view"],
 } as const;
 
@@ -40,6 +42,7 @@ export function App() {
     if (path === "/channels") content = <Channels user={user} />;
     if (path === "/playlists") content = <Playlists user={user} />;
     if (path === "/settings") content = <SettingsPage />;
+    if (path === "/settings/resources") content = <ResourceSettingsPage />;
     if (path === "/users") content = <UsersPage user={user} />;
     return <Shell user={user}>{content}<Player /><Notifications /></Shell>;
 }

@@ -475,7 +475,10 @@ nao consigo acesa o porjeto localmente so remoto (Loading module from “http://
 Layout was forced before the page was fully loaded. If stylesheets are not yet loaded this may cause a flash of unstyled content. index.js:1583:1
 Loading failed for the module with source “http://localhost:5000/assets/index-DRRGoslW.js”. localhost:5000:9:69
 Loading module from “http://localhost:5000/assets/index-DRRGoslW.js” was blocked because of a disallowed MIME type (“text/html”). }. e na porta 5173 so fuciona a pagina principal {The server is configured with a public base URL of /app-assets/ - did you mean to visit /app-assets/channels instead?}.
+17. uma pagina nova com as mesma fuionalidades so que convertida para EPG. para adiministrar as guia de cada canal administrar e configura guia dos canas com horarios dias e entre outras informaçoes de progamação de canasl sempre siconizando com o canal e o link que foi criado (se quiser) ou os novos que vai ser criado (se quiser.) . tudo bem estuturado com todas is requisito que tem neste arquivo e documentos.
 
+18. a pagina incial a "🟢 ONLINE Ping 34.63 ms" pode na teg <header> no sento da tela mostrando em todas as paginas e o PIPELINE o Progresso da operação pode fica pegando da borda de baixo so o caregamento  e a etapa que esta no sentro do caregamento com %. essas duas informaçoes pode trira ta pagina pricipal.
+19. DISTRIBUIÇÃO e ATIVIDADE deixa a baixo de MONITORAMENTO AO VIVO
 
 ## Prioridades gerais
 

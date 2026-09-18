@@ -167,10 +167,10 @@ Confirme que os itens abaixo existam:
 
 ## Primeiro acesso
 
-Credenciais padrão:
+Credencial inicial:
 
 - usuário: `admin`
-- senha: `admin123`
+- senha: a senha aleatória exibida/criada pelo `npm run setup` em `ADMIN_INITIAL_PASSWORD` no `.env`
 
 Se a base ainda estiver vazia, o sistema cria esse usuário automaticamente na primeira execução.
 

@@ -480,8 +480,20 @@ def api_trigger_sync():
 @require_role("admin")
 def api_save_config():
     data = request.json or {}
-    for k, v in data.items(): manager.config_mgr.update_key(k, v)
-    setup_scheduler(); add_process_log("Configurações salvas com sucesso.", "success"); return jsonify({"status": "atualizado"})
+    if not isinstance(data, dict):
+        return jsonify({"error": "Configuração inválida."}), 400
+    known = set(manager.config_mgr.get_all())
+    unknown = sorted(set(data) - known)
+    if unknown:
+        return jsonify({"error": "Configuração desconhecida.", "keys": unknown}), 400
+    try:
+        for key, value in data.items():
+            manager.config_mgr.update_key(key, value)
+    except (KeyError, OSError, ValueError) as exc:
+        return jsonify({"error": f"Não foi possível salvar a configuração: {exc}"}), 400
+    setup_scheduler()
+    add_process_log("Configurações salvas com sucesso.", "success")
+    return jsonify({"status": "atualizado"})
 
 
 @app.route("/api/config", methods=["GET"])

@@ -168,7 +168,7 @@ def api_toggle_autoremove(ch_id):
     if flag not in (0,1,False,True):return jsonify({"error":"Valor inválido"}),400
     with manager.db.get_connection() as conn:conn.execute("UPDATE channels SET auto_remove_if_offline=? WHERE id=?",(int(bool(flag)),ch_id));conn.commit()
     return jsonify({"status":"atualizado"})
-@app.route("/api/v1/channels",methods=["POST"])
+@app.route("/api/v1/channels",methods=["POST"],endpoint="legacy_create_channel")
 @require_role("editor")
 def create_channel():return jsonify({"error":"Use o domínio de canais para criação."}),405
 @app.route("/api/v1/playlists/generate",methods=["POST"])

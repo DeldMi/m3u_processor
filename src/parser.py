@@ -5,7 +5,7 @@ from typing import List, Dict, Any
 class M3UParser:
     """Parser tolerante para M3U/M3U8 com metadados IPTV comuns."""
 
-    _ATTR_RE = re.compile(r'''([A-Za-z0-9_-]+)\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s,]+))''')
+    _ATTR_RE = re.compile(r'''([A-Za-z0-9_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s,]+))''')
 
     @classmethod
     def _attributes(cls, metadata: str) -> Dict[str, str]:

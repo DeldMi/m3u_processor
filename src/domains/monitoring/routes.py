@@ -84,7 +84,8 @@ def register_monitoring_routes(app, manager, process_state, process_logs, notifi
 
     @app.route("/api/v1/channels", methods=["POST"])
     @require_permission("channels", "create")
-    def create_channel():
+    def domain_create_channel():
+        """Cria canal manualmente sem colidir com o endpoint legado de app.py."""
         data = dict(request.get_json(silent=True) or {})
         channel_id = manager.db.create_channel(data)
         if channel_id is None:

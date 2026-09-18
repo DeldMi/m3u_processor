@@ -510,3 +510,8 @@ Loading module from “http://localhost:5000/assets/index-DRRGoslW.js” was blo
 - O parser M3U normaliza atributos IPTV comuns e aceita aspas simples ou duplas.
 - Foram adicionados testes para parser, RBAC e configuracao publica.
 - Nenhuma funcionalidade existente deve ser removida; reorganizacao deve preservar o fluxo equivalente.
+
+- TLS de saida foi endurecido: validacao de certificado agora e padrao; certificados invalidos exigem ALLOW_INSECURE_TLS=1.
+- Bancos novos nao recebem mais a senha fixa admin123: o setup gera ADMIN_INITIAL_PASSWORD aleatoria e a grava no .env; banco criado manualmente gera uma senha unica no primeiro start.
+- ADMIN_INITIAL_PASSWORD tambem e tratado como segredo e nunca deve aparecer na API publica de configuracao.
+- Cliente HTTP React agora diferencia erro de rede, HTTP e resposta JSON da API.

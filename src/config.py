@@ -4,7 +4,7 @@ from dotenv import dotenv_values, set_key
 class ConfigManager:
     # Nunca devolver estes valores para a interface administrativa. Eles são
     # credenciais/segredos e devem permanecer somente no ambiente do servidor.
-    SECRET_KEYS = frozenset({"SECRET_KEY", "API_TOKEN"})
+    SECRET_KEYS = frozenset({"SECRET_KEY", "API_TOKEN", "ADMIN_INITIAL_PASSWORD"})
 
     def __init__(self, root_dir: str):
         self.root_dir = root_dir
@@ -25,6 +25,8 @@ class ConfigManager:
         return {
             "SECRET_KEY": config.get("SECRET_KEY", "m3u_processor_secret_key_fixed"),
             "API_TOKEN": config.get("API_TOKEN", ""),
+            "ADMIN_INITIAL_PASSWORD": config.get("ADMIN_INITIAL_PASSWORD", ""),
+            "ALLOW_INSECURE_TLS": str(config.get("ALLOW_INSECURE_TLS", "0")).strip().lower() in {"1", "true", "yes"},
             "MAX_CHANNELS_PER_FILE": self._safe_int(config.get("MAX_CHANNELS_PER_FILE", 400), 400),
             "CONCURRENCY_LIMIT": self._safe_int(config.get("CONCURRENCY_LIMIT", 50), 50),
             "REQUEST_TIMEOUT": self._safe_int(config.get("REQUEST_TIMEOUT", 6), 6),

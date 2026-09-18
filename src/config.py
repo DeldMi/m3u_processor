@@ -1,5 +1,7 @@
 import os
+import re
 import secrets
+from io import StringIO
 from dotenv import dotenv_values, set_key
 
 
@@ -8,6 +10,7 @@ class ConfigManager:
 
     # Estes valores jamais devem ser devolvidos ao frontend.
     SECRET_KEYS = frozenset({"SECRET_KEY", "API_TOKEN", "ADMIN_INITIAL_PASSWORD"})
+    _ENV_ASSIGNMENT = re.compile(r"^\s*(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=")
 
     def __init__(self, root_dir: str):
         self.root_dir = root_dir
@@ -17,9 +20,33 @@ class ConfigManager:
                 f.write("# Configuracao Inicial\n")
         self._ensure_secret("SECRET_KEY", 48)
 
+    def _read_env(self) -> dict:
+        """Lê o .env sem deixar uma linha inválida derrubar o servidor.
+
+        Linhas vazias e comentários são preservados para o parser. Linhas que
+        não possuem a forma KEY=VALUE são ignoradas somente na leitura. Isso
+        evita a repetição de warnings do python-dotenv e mantém as demais
+        configurações válidas disponíveis durante a inicialização.
+        """
+        try:
+            with open(self.env_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        except (OSError, UnicodeError):
+            return {}
+
+        valid_lines = []
+        for line in lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or self._ENV_ASSIGNMENT.match(line):
+                valid_lines.append(line)
+        try:
+            return dict(dotenv_values(stream=StringIO("".join(valid_lines))))
+        except (TypeError, ValueError):
+            return {}
+
     def _ensure_secret(self, key: str, byte_length: int):
         """Garante segredo persistente para evitar fallback público/fixo."""
-        config = dotenv_values(self.env_path)
+        config = self._read_env()
         if not str(config.get(key) or "").strip():
             set_key(self.env_path, key, secrets.token_urlsafe(byte_length))
             try:
@@ -35,7 +62,7 @@ class ConfigManager:
             return default
 
     def get_all(self) -> dict:
-        config = dotenv_values(self.env_path)
+        config = self._read_env()
         return {
             "SECRET_KEY": config.get("SECRET_KEY", ""),
             "API_TOKEN": config.get("API_TOKEN", ""),

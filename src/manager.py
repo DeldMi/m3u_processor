@@ -299,10 +299,11 @@ class PlaylistManager:
             else:
                 invalid_list.append(ch_info)
 
-        # 3. Expurgo dos canais fora do ar que possuem auto_remove_if_offline ativo
+        # 3. Canais offline permanecem no banco para preservar histórico e permitir
+        # revalidação automática. A opção auto_remove_if_offline controla apenas
+        # regras de publicação/uso futuro; nunca apagamos registros silenciosamente.
         if progress_callback:
-            progress_callback("Removendo canais inoperantes do banco...")
-        self.db.delete_purged_channels()
+            progress_callback("Mantendo canais inoperantes no banco para revalidação...")
 
         # 4. Publicação controlada: a auditoria não publica arquivos por padrão.
         publication_mode = (publication_mode or "NONE").upper()
@@ -387,7 +388,6 @@ class PlaylistManager:
 
         report = {
             "timestamp": datetime.now().isoformat(),
-            "configuracoes": self.config_mgr.get_all(),
             "metricas": {
                 "total_extraido": total,
                 "total_operante": len(valid),

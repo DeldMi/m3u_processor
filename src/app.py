@@ -219,6 +219,16 @@ def view_settings():
     return render_template("settings.html", config=manager.config_mgr.get_all())
 
 
+@app.route("/settings/<path:subpath>")
+@require_role("admin")
+def view_settings_subpath(subpath):
+    """Serve subseções da SPA quando acessadas diretamente pelo Flask."""
+    react_app = serve_react_app()
+    if react_app:
+        return react_app
+    return render_template("settings.html", config=manager.config_mgr.get_all())
+
+
 @app.route("/api/status")
 @require_role("viewer")
 def get_status():

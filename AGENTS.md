@@ -442,6 +442,15 @@ npm run setup
 
 O próprio setup deve detectar e recriar o ambiente virtual. Não é necessário alterar scripts para apontar para `/usr/bin/python.exe` ou para um caminho absoluto do computador.
 
+## Estado atual — navegação local e Configurações (2026-09-17)
+
+- Vite em desenvolvimento usa `base: "/"`; build local servido pelo Flask usa `/app-assets/`; Cloudflare Pages usa `/`.
+- `App.tsx` também normaliza o prefixo legado `/app-assets` para manter compatibilidade.
+- Flask serve `/settings/<subpath>` para permitir acesso direto/recarregamento de `/settings/themes`, `/settings/resources` e futuras subseções.
+- A tela `/settings/themes` possui seleção de temas embutidos, criação/exclusão de temas personalizados e tema individual por usuário. Essas funções devem ser preservadas em futuras alterações.
+- Portas locais: `5173` = Vite frontend; `5000` = Flask/API; `8080` = servidor público de playlists/EPG.
+- Validação obrigatória após mudanças de navegação: `npm run verify`, `npm run dev`, testar todas as rotas e recarregar diretamente cada página.
+
 ## Próxima implementação prioritária
 
 A próxima etapa do projeto deve implementar e validar, nesta ordem:

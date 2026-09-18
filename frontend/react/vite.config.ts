@@ -1,7 +1,7 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
     // `loadEnv` aceita um diretório explícito; assim a configuração não depende
     // de `process` nem exige @types/node durante o typecheck do frontend.
     const env = loadEnv(mode, '.', '')
@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
         plugins: [react()],
         // Flask serve a SPA localmente em /app-assets/. No Cloudflare Pages,
         // a aplicação é publicada na raiz do domínio.
-        base: cloudflare ? '/' : '/app-assets/',
+        base: command === 'serve' ? '/' : (cloudflare ? '/' : '/app-assets/'),
         css: {
             preprocessorOptions: {
                 scss: {

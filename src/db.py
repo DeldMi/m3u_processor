@@ -17,6 +17,11 @@ class Database:
         conn=sqlite3.connect(self.db_path,factory=_ManagedConnection);conn.row_factory=sqlite3.Row;return conn
     def close(self):return None
     def __del__(self):return None
+    def get_user(self,user_id:int)->Optional[Dict[str,Any]]:
+        """Retorna um usuário pelo ID sem expor o hash da senha."""
+        with self.get_connection() as conn:
+            row=conn.execute("SELECT id,username,role,created_at FROM users WHERE id=?",(user_id,)).fetchone()
+        return dict(row) if row else None
     def init_schema(self):
         with self.get_connection() as conn:
             cursor=conn.cursor()

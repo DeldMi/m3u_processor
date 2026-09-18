@@ -498,3 +498,5 @@ Loading module from “http://localhost:5000/assets/index-DRRGoslW.js” was blo
 11. Manutenção, diagnóstico e auditoria.
 12. Desempenho para grandes volumes.
 13. as fuionablidade sempre tem que continuar a nao ser que eu pessa para tirar. ela pode ser remanejada com intuito de organização, sematico, desigino e requisito basico de progamação.
+
+14. A base deste porjeto e analizar, testar, prosesalo e gera links tem que ter uma administrção compreta (Analise teste edição criação etc).

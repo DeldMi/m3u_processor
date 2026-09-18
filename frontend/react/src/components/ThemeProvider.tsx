@@ -1,5 +1,41 @@
-import React,{createContext,useContext,useEffect,useMemo,useState} from "react";import {api} from "../services/api";
-export type Theme={id:string;name:string;description?:string;bg:string;surface:string;line:string;ink:string;muted:string;accent:string;success:string;danger:string;menu:string;login:string};
-export const BUILTIN:Theme[]=[{id:"default",name:"M3U Dark",bg:"#071116",surface:"#102128",line:"#263943",ink:"#f4f7f8",muted:"#9baeb4",accent:"#46c3df",success:"#56d6a1",danger:"#f27777",menu:"#10232b",login:"#071116"},{id:"light",name:"Claro",bg:"#eef3f5",surface:"#ffffff",line:"#c9d6dc",ink:"#14232d",muted:"#5d7078",accent:"#167e9b",success:"#198b61",danger:"#bd3d4a",menu:"#ffffff",login:"#e8f0f3"},{id:"graphite",name:"Grafite",bg:"#101114",surface:"#1a1c21",line:"#343840",ink:"#f2f3f5",muted:"#a1a6b0",accent:"#a8b5ff",success:"#67d6a5",danger:"#ff7e8b",menu:"#20232a",login:"#0c0d10"}];
-type Ctx={themes:Theme[];theme:Theme;setTheme:(id:string)=>void;reload:()=>void};const ThemeContext=createContext<Ctx|null>(null);export const useTheme=()=>useContext(ThemeContext)!;
-export function ThemeProvider({userKey,children}:{userKey:string;children:React.ReactNode}){const[themes,setThemes]=useState<Theme[]>(BUILTIN),[id,setId]=useState(localStorage.getItem(`m3u-theme:${userKey}`)||"default");const reload=()=>api<Theme[]>("/api/v1/themes").then(v=>setThemes([...BUILTIN,...v.filter(x=>!BUILTIN.some(b=>b.id===x.id))])).catch(()=>{});useEffect(()=>{reload()},[]);const theme=useMemo(()=>themes.find(t=>t.id===id)||themes[0],[themes,id]);useEffect(()=>{const root=document.documentElement;const vars={"--theme-bg":theme.bg,"--theme-surface":theme.surface,"--theme-line":theme.line,"--theme-ink":theme.ink,"--theme-muted":theme.muted,"--theme-accent":theme.accent,"--theme-success":theme.success,"--theme-danger":theme.danger,"--theme-menu":theme.menu,"--theme-login":theme.login};Object.entries(vars).forEach(([k,v])=>root.style.setProperty(k,v));root.dataset.theme=theme.id;let style=document.getElementById("m3u-custom-theme") as HTMLStyleElement|null;if(!style){style=document.createElement("style");style.id="m3u-custom-theme";document.head.appendChild(style)}style.textContent=`body,.app-shell{background:var(--theme-bg);color:var(--theme-ink)}.sidebar{background:var(--theme-bg);border-color:var(--theme-line)}.panel,.metric,.settings-submenu,.modal,.login-card,.settings-resource-link,.form-section{background:var(--theme-surface);border-color:var(--theme-line)}.settings-submenu button:hover,.settings-submenu button.active,.sidebar nav a:hover,.sidebar nav a.active{background:var(--theme-menu);color:var(--theme-ink)}.kicker,.text-button,.table-sort:hover{color:var(--theme-accent)}.button.primary,.brand-mark{background:var(--theme-accent)}.button.subtle{background:var(--theme-menu)}.account-button{color:var(--theme-ink)}.muted-text,.panel-badge,.page-heading p,.topbar p{color:var(--theme-muted)}.login-screen{background:var(--theme-login)}input,select,textarea,.search{background:var(--theme-bg);color:var(--theme-ink);border-color:var(--theme-line)}.notification-panel,.notification-toast{background:var(--theme-surface);border-color:var(--theme-line)}.notification-bell{border-color:var(--theme-line);color:var(--theme-muted)}.notification-bell.active,.notification-bell:hover{border-color:var(--theme-accent);color:var(--theme-ink)}`},[theme]);const setTheme=(next:string)=>{setId(next);localStorage.setItem(`m3u-theme:${userKey}`,next)};return <ThemeContext.Provider value={{themes,theme,setTheme,reload}}>{children}</ThemeContext.Provider>}
+import React,{createContext,useContext,useEffect,useMemo,useState} from "react";
+import {api} from "../services/api";
+
+export type Theme={
+    id:string;
+    name:string;
+    description?:string;
+    bg:string; surface:string; line:string; ink:string; muted:string;
+    accent:string; success:string; danger:string; menu:string; login:string;
+    fontFamily?:string; fontSize?:string; headingScale?:string;
+    siteName?:string; logo?:string; title?:string; h1?:string; h2?:string; h3?:string;
+};
+
+export const BUILTIN:Theme[]=[
+    {id:"default",name:"M3U Dark",bg:"#071116",surface:"#102128",line:"#263943",ink:"#f4f7f8",muted:"#9baeb4",accent:"#46c3df",success:"#56d6a1",danger:"#f27777",menu:"#10232b",login:"#071116"},
+    {id:"light",name:"Claro",bg:"#eef3f5",surface:"#ffffff",line:"#c9d6dc",ink:"#14232d",muted:"#5d7078",accent:"#167e9b",success:"#198b61",danger:"#bd3d4a",menu:"#ffffff",login:"#e8f0f3"},
+    {id:"graphite",name:"Grafite",bg:"#101114",surface:"#1a1c21",line:"#343840",ink:"#f2f3f5",muted:"#a1a6b0",accent:"#a8b5ff",success:"#67d6a5",danger:"#ff7e8b",menu:"#20232a",login:"#0c0d10"}
+];
+
+type Ctx={themes:Theme[];theme:Theme;setTheme:(id:string)=>void;reload:()=>void};
+const ThemeContext=createContext<Ctx|null>(null);
+export const useTheme=()=>useContext(ThemeContext)!;
+
+export function ThemeProvider({userKey,children}:{userKey:string;children:React.ReactNode}){
+    const[themes,setThemes]=useState<Theme[]>(BUILTIN),[id,setId]=useState(localStorage.getItem(`m3u-theme:${userKey}`)||"default");
+    const reload=()=>api<Theme[]>("/api/v1/themes").then(v=>setThemes([...BUILTIN,...v.filter(x=>!BUILTIN.some(b=>b.id===x.id))])).catch(()=>{});
+    useEffect(()=>{reload()},[]);
+    const theme=useMemo(()=>themes.find(t=>t.id===id)||themes[0],[themes,id]);
+    useEffect(()=>{
+        const root=document.documentElement;
+        const vars={"--theme-bg":theme.bg,"--theme-surface":theme.surface,"--theme-line":theme.line,"--theme-ink":theme.ink,"--theme-muted":theme.muted,"--theme-accent":theme.accent,"--theme-success":theme.success,"--theme-danger":theme.danger,"--theme-menu":theme.menu,"--theme-login":theme.login,"--theme-font":theme.fontFamily||"Inter, system-ui, sans-serif","--theme-font-size":theme.fontSize||"16px","--theme-heading-scale":theme.headingScale||"1"};
+        Object.entries(vars).forEach(([k,v])=>root.style.setProperty(k,v));
+        root.dataset.theme=theme.id;
+        let style=document.getElementById("m3u-custom-theme") as HTMLStyleElement|null;
+        if(!style){style=document.createElement("style");style.id="m3u-custom-theme";document.head.appendChild(style)}
+        style.textContent=`body,.app-shell{background:var(--theme-bg);color:var(--theme-ink);font-family:var(--theme-font);font-size:var(--theme-font-size)}.sidebar{background:var(--theme-bg);border-color:var(--theme-line)}.panel,.metric,.settings-submenu,.modal,.login-card,.settings-resource-link,.form-section{background:var(--theme-surface);border-color:var(--theme-line)}.settings-submenu button:hover,.settings-submenu button.active,.sidebar nav a:hover,.sidebar nav a.active{background:var(--theme-menu);color:var(--theme-ink)}.kicker,.text-button,.table-sort:hover{color:var(--theme-accent)}.button.primary,.brand-mark{background:var(--theme-accent)}.button.subtle{background:var(--theme-menu)}.account-button{color:var(--theme-ink)}.muted-text,.panel-badge,.page-heading p,.topbar p{color:var(--theme-muted)}.login-screen{background:var(--theme-login)}input,select,textarea,.search{background:var(--theme-bg);color:var(--theme-ink);border-color:var(--theme-line)}.notification-panel,.notification-toast{background:var(--theme-surface);border-color:var(--theme-line)}.notification-bell{border-color:var(--theme-line);color:var(--theme-muted)}.notification-bell.active,.notification-bell:hover{border-color:var(--theme-accent);color:var(--theme-ink)}h1{font-size:calc(2rem * var(--theme-heading-scale))}h2{font-size:calc(1.5rem * var(--theme-heading-scale))}h3{font-size:calc(1.2rem * var(--theme-heading-scale))}`;
+        document.title=theme.title||theme.siteName||theme.name;
+    },[theme]);
+    const setTheme=(next:string)=>{setId(next);localStorage.setItem(`m3u-theme:${userKey}`,next)};
+    return <ThemeContext.Provider value={{themes,theme,setTheme,reload}}>{children}</ThemeContext.Provider>
+}

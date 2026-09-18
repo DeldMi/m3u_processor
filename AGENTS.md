@@ -478,7 +478,10 @@ Loading module from “http://localhost:5000/assets/index-DRRGoslW.js” was blo
 17. uma pagina nova com as mesma fuionalidades so que convertida para EPG. para adiministrar as guia de cada canal administrar e configura guia dos canas com horarios dias e entre outras informaçoes de progamação de canasl sempre siconizando com o canal e o link que foi criado (se quiser) ou os novos que vai ser criado (se quiser.) . tudo bem estuturado com todas is requisito que tem neste arquivo e documentos.
 
 18. a pagina incial a "🟢 ONLINE Ping 34.63 ms" pode na teg <header> no sento da tela mostrando em todas as paginas e o PIPELINE o Progresso da operação pode fica pegando da borda de baixo so o caregamento  e a etapa que esta no sentro do caregamento com %. essas duas informaçoes pode trira ta pagina pricipal.
-19. DISTRIBUIÇÃO e ATIVIDADE deixa a baixo de MONITORAMENTO AO VIVO
+19. DISTRIBUIÇÃO e ATIVIDADE deixa a baixo de MONITORAMENTO AO VIVO e Status do processo, Canais catalogados, Online e Offline / removidos fica assima
+
+20. A lista de canas nuca se apaga do db tem que ter uma fomrma de o usuario remover tbm do db porque seme mostra la mesmo eu nao colocando lista de canas. opção para apaga tudo do banco visualizar o que tem no banco ele deve sempre apareser na pagina Canais e editor verificando ou nao se nao verificado vai fica com o estado verificado se verificado ou vai esta on ou off. mas como ele ja verifica em tempo real ele vai esta mundado altomaticamente. a nao ser que eu coloque uma lista nova de canas com o link ou adicione um canal novo e nao coloque como on ou off.
+
 
 ## Prioridades gerais
 

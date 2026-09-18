@@ -15,7 +15,14 @@ const GROUPS:readonly PermissionGroup[]=[
 ];
 type Form={username:string;password:string;role:User["role"];display_name:string;full_name:string;email:string;avatar:string;phone:string;description:string;department:string;active:boolean;expires_at:string;permissions:PermissionMap};
 const empty=():Form=>({username:"",password:"",role:"viewer",display_name:"",full_name:"",email:"",avatar:"",phone:"",description:"",department:"",active:true,expires_at:"",permissions:{}});
-const rolePermissions=(role:User["role"]):PermissionMap=>{if(role==="admin")return Object.fromEntries(GROUPS.flatMap(g=>g.resources).map(([r])=>[r,ACTIONS.map(a=>a.key)])) as PermissionMap;if(role==="editor")return {dashboard:["view"],channels:["view","create","edit"],playlists:["view","create","edit"],epg:["view","create","edit"],sync:["view","execute"],health:["view"]};return {dashboard:["view"],channels:["view"],playlists:["view"],epg:["view"],health:["view"]};};
+const rolePermissions=(role:User["role"]):PermissionMap=>{
+ if(role==="admin"){
+  const resources:ResourceKey[]=GROUPS.flatMap(g=>g.resources.map(([resource])=>resource));
+  return Object.fromEntries(resources.map(resource=>[resource,ACTIONS.map(a=>a.key)])) as PermissionMap;
+ }
+ if(role==="editor")return {dashboard:["view"],channels:["view","create","edit"],playlists:["view","create","edit"],epg:["view","create","edit"],sync:["view","execute"],health:["view"]};
+ return {dashboard:["view"],channels:["view"],playlists:["view"],epg:["view"],health:["view"]};
+};
 const presets:{key:string;label:string;role:User["role"];description:string;permissions?:PermissionMap}[]=[
  {key:"viewer",label:"Consulta",role:"viewer",description:"Somente consulta e acompanhamento."},
  {key:"operator",label:"Operador",role:"editor",description:"Canais, playlists e execução operacional."},

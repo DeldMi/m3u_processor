@@ -486,7 +486,7 @@ def api_save_config():
 
 @app.route("/api/config", methods=["GET"])
 @require_role("admin")
-def api_get_config(): return jsonify(manager.config_mgr.get_all())
+def api_get_config(): return jsonify(manager.config_mgr.get_public())
 
 
 @app.route("/playlist/<filename>")

@@ -7,6 +7,7 @@ import re
 import aiohttp
 from datetime import datetime
 from typing import List, Dict, Any, Tuple
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 from src.parser import M3UParser
 from src.classifier import StreamClassifier
 from src.checker import test_stream, create_ssl_context
@@ -17,6 +18,7 @@ from src.db import Database
 # Silencia logs ruidosos de DNS no terminal
 logging.getLogger("aiohttp.connector").setLevel(logging.CRITICAL)
 logging.getLogger("asyncio").setLevel(logging.CRITICAL)
+
 
 class PlaylistManager:
     def __init__(self, base_dir: str):
@@ -38,6 +40,26 @@ class PlaylistManager:
         except Exception:
             pass
 
+    @staticmethod
+    def _redact_url(url: str) -> str:
+        """Remove credenciais comuns de URLs antes de gravá-las em auditorias."""
+        try:
+            parts = urlsplit(url)
+            username = "" if not parts.username else "***"
+            netloc = parts.hostname or ""
+            if parts.port:
+                netloc += f":{parts.port}"
+            if username:
+                netloc = f"{username}@{netloc}"
+            query = []
+            for key, value in parse_qsl(parts.query, keep_blank_values=True):
+                if key.lower() in {"password", "pass", "pwd", "token", "auth", "authorization", "username", "user", "key"}:
+                    value = "***"
+                query.append((key, value))
+            return urlunsplit((parts.scheme, netloc, parts.path, urlencode(query), parts.fragment))
+        except Exception:
+            return "[URL_REDACTED]"
+
     def load_input_channels(self) -> List[Dict[str, Any]]:
         return asyncio.run(self.load_all_sources())
 
@@ -45,18 +67,25 @@ class PlaylistManager:
         if not channels:
             return [], []
         cfg = self.config_mgr.get_all()
-        semaphore = asyncio.Semaphore(max(1, cfg["CONCURRENCY_LIMIT"]))
-        connector = aiohttp.TCPConnector(ssl=create_ssl_context(bool(cfg.get("ALLOW_INSECURE_TLS", False))), limit=max(1, cfg["CONCURRENCY_LIMIT"]), ttl_dns_cache=300)
+        concurrency = max(1, int(cfg["CONCURRENCY_LIMIT"]))
+        semaphore = asyncio.Semaphore(concurrency)
+        connector = aiohttp.TCPConnector(
+            ssl=create_ssl_context(bool(cfg.get("ALLOW_INSECURE_TLS", False))),
+            limit=concurrency,
+            ttl_dns_cache=300,
+        )
         async with aiohttp.ClientSession(connector=connector) as session:
             tasks = [test_stream(session, ch, semaphore, cfg["USER_AGENT"], cfg["REQUEST_TIMEOUT"]) for ch in channels]
-            results = await asyncio.gather(*tasks)
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
         valid, invalid = [], []
-        for channel, is_valid, latency, status_code in results:
-            if is_valid:
-                valid.append({**channel, "latency_ms": latency, "http_status": status_code})
-            else:
-                invalid.append({**channel, "latency_ms": latency, "http_status": status_code})
+        for channel, result in zip(channels, results):
+            if isinstance(result, Exception):
+                invalid.append({**channel, "latency_ms": 0, "http_status": 0, "check_error": str(result)})
+                continue
+            _, is_valid, latency, status_code = result
+            target = valid if is_valid else invalid
+            target.append({**channel, "latency_ms": latency, "http_status": status_code})
         return valid, invalid
 
     async def refresh_channel_health(self) -> Dict[str, int]:
@@ -77,7 +106,7 @@ class PlaylistManager:
         return [m["m3u_name"] for m in manifests]
 
     def generate_audit_log(self, total: int, valid: List[Dict[str, Any]], invalid: List[Dict[str, Any]], created: List[str]) -> str:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         log_path = os.path.join(self.logs_dir, f"auditoria_{timestamp}.json")
         report = {
             "timestamp": datetime.now().isoformat(),
@@ -88,11 +117,11 @@ class PlaylistManager:
                 "arquivos_gerados": created,
             },
             "canais_operantes": [
-                {"nome": c.get("name", "Canal Desconhecido"), "url": c.get("url", "")}
+                {"nome": c.get("name", "Canal Desconhecido"), "url": self._redact_url(c.get("url", ""))}
                 for c in valid
             ],
             "canais_inoperantes": [
-                {"nome": c.get("name", "Canal Desconhecido"), "url": c.get("url", "")}
+                {"nome": c.get("name", "Canal Desconhecido"), "url": self._redact_url(c.get("url", ""))}
                 for c in invalid
             ],
         }
@@ -104,7 +133,8 @@ class PlaylistManager:
         cfg = self.config_mgr.get_all()
         try:
             headers = {"User-Agent": cfg["USER_AGENT"]}
-            async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=25)) as resp:
+            timeout = aiohttp.ClientTimeout(total=max(5, int(cfg["REQUEST_TIMEOUT"])))
+            async with session.get(url, headers=headers, timeout=timeout) as resp:
                 if resp.status == 200:
                     text = await resp.text(errors="ignore")
                     return M3UParser.parse_text(text, source_identifier=url)
@@ -113,49 +143,40 @@ class PlaylistManager:
         return []
 
     async def load_all_sources(self) -> List[Dict[str, Any]]:
-        """
-        Coleta e deduplica canais de todas as origens:
-        1. Pasta output/ (canais ja processados anteriormente, para reauditoria)
-        2. Pasta input/ (novos arquivos .m3u, .m3u8, .txt)
-        3. URLs remotas cadastradas no .env (REMOTE_M3U_URLS)
-        """
         all_channels = []
         seen_urls = set()
 
         def add_channels(channel_list):
             for ch in channel_list:
-                clean_url = ch["url"].strip()
+                clean_url = str(ch.get("url", "")).strip()
                 if clean_url and clean_url not in seen_urls:
                     seen_urls.add(clean_url)
                     all_channels.append(ch)
 
-        # 1. Arquivos ja existentes em output/ para revalidacao
         for fpath in glob.glob(os.path.join(self.output_dir, "*.m3u")):
             try:
                 with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
                     add_channels(M3UParser.parse_text(f.read(), source_identifier="output_existente"))
-            except Exception:
+            except (OSError, UnicodeError):
                 pass
 
-        # 2. Arquivos novos em input/
         for ext in ("*.m3u", "*.m3u8", "*.txt"):
             for fpath in glob.glob(os.path.join(self.input_dir, ext)):
                 try:
                     with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
                         add_channels(M3UParser.parse_text(f.read(), source_identifier=os.path.basename(fpath)))
-                except Exception:
+                except (OSError, UnicodeError):
                     pass
 
-        # 3. Listas remotas via HTTP/HTTPS
         cfg = self.config_mgr.get_all()
-        remote_urls = [u.strip() for u in cfg.get("REMOTE_M3U_URLS", "").split(";") if u.strip().startswith("http")]
+        remote_urls = [u.strip() for u in cfg.get("REMOTE_M3U_URLS", "").split(";") if u.strip().lower().startswith(("http://", "https://"))]
         if remote_urls:
             connector = aiohttp.TCPConnector(ssl=create_ssl_context(bool(cfg.get("ALLOW_INSECURE_TLS", False))), ttl_dns_cache=300)
             async with aiohttp.ClientSession(connector=connector) as session:
-                tasks = [self._fetch_remote_m3u(session, u) for u in remote_urls]
-                results = await asyncio.gather(*tasks)
+                results = await asyncio.gather(*(self._fetch_remote_m3u(session, u) for u in remote_urls), return_exceptions=True)
                 for res in results:
-                    add_channels(res)
+                    if not isinstance(res, Exception):
+                        add_channels(res)
 
         return all_channels
 
@@ -163,14 +184,17 @@ class PlaylistManager:
         cfg = self.config_mgr.get_all()
         profile = profile or {}
         max_limit = max(1, int(profile.get("limit") or cfg["MAX_CHANNELS_PER_FILE"]))
-        base_url = cfg["PUBLIC_BASE_URL"]
+        base_url = str(cfg["PUBLIC_BASE_URL"]).rstrip("/")
         selected = [channel for channel in channels if self._matches_playlist_profile(channel, profile)]
         sort_field = profile.get("sort", "id")
-        reverse = profile.get("direction", "asc").lower() == "desc"
+        reverse = str(profile.get("direction", "asc")).lower() == "desc"
         selected.sort(key=lambda channel: str(channel.get(sort_field, "")).lower(), reverse=reverse)
 
         if not profile.get("preserve_existing"):
-            for f in glob.glob(os.path.join(self.output_dir, "*.*")):
+            # Não apaga antes de sabermos que há conteúdo válido para publicar.
+            # O chamador deve preferir um diretório temporário/atomic replace para
+            # publicação; aqui removemos apenas arquivos gerados pelo aplicativo.
+            for f in glob.glob(os.path.join(self.output_dir, "playlist*.m3u")) + glob.glob(os.path.join(self.output_dir, "epg*.xml")):
                 try:
                     os.remove(f)
                 except OSError:
@@ -187,35 +211,40 @@ class PlaylistManager:
             xml_name = f"epg{file_prefix}_parte_{idx:02d}.xml"
             m3u_path = os.path.join(self.output_dir, m3u_name)
             xml_path = os.path.join(self.output_dir, xml_name)
-
             EPGManager.slice_epg_for_chunk("", chunk, xml_path)
-
-            with open(m3u_path, "w", encoding="utf-8") as f:
-                f.write(f'#EXTM3U url-tvg="{base_url}/epg/{xml_name}"\n')
-                for ch in chunk:
-                    meta = ch.get("metadata") or f'#EXTINF:-1 tvg-id="{ch.get("tvg_id", ch.get("name", ""))}",{ch.get("name", "Canal Desconhecido")}'
-                    channel_number = ch.get("channel_number")
-                    if channel_number is not None:
-                        meta = re.sub(r'\s+tvg-chno="[^"]*"', "", meta, flags=re.IGNORECASE)
-                        extinf_prefix, extinf_rest = meta.split(",", 1) if "," in meta else (meta, ch.get("name", "Canal Desconhecido"))
-                        meta = f'{extinf_prefix} tvg-chno="{int(channel_number)}",{extinf_rest}'
-                    f.write(f'{meta}\n{ch["url"]}\n')
-
-            manifests.append({
-                "m3u_name": m3u_name,
-                "m3u_url": f"{base_url}/playlist/{m3u_name}",
-                "xml_name": xml_name,
-                "xml_url": f"{base_url}/epg/{xml_name}",
-                "total": len(chunk)
-            })
-
+            temp_m3u = m3u_path + ".tmp"
+            try:
+                with open(temp_m3u, "w", encoding="utf-8") as f:
+                    f.write(f'#EXTM3U url-tvg="{base_url}/epg/{xml_name}"\n')
+                    for ch in chunk:
+                        meta = ch.get("metadata") or f'#EXTINF:-1 tvg-id="{ch.get("tvg_id", ch.get("name", ""))}",{ch.get("name", "Canal Desconhecido")}'
+                        channel_number = ch.get("channel_number")
+                        if channel_number is not None:
+                            meta = re.sub(r'\s+tvg-chno="[^"]*"', "", meta, flags=re.IGNORECASE)
+                            extinf_prefix, extinf_rest = meta.split(",", 1) if "," in meta else (meta, ch.get("name", "Canal Desconhecido"))
+                            meta = f'{extinf_prefix} tvg-chno="{int(channel_number)}",{extinf_rest}'
+                        f.write(f'{meta}\n{ch["url"]}\n')
+                os.replace(temp_m3u, m3u_path)
+            except Exception:
+                try:
+                    if os.path.exists(temp_m3u):
+                        os.remove(temp_m3u)
+                except OSError:
+                    pass
+                raise
+            manifests.append({"m3u_name": m3u_name, "m3u_url": f"{base_url}/playlist/{m3u_name}", "xml_name": xml_name, "xml_url": f"{base_url}/epg/{xml_name}", "total": len(chunk)})
         return manifests
 
     @staticmethod
     def _matches_playlist_profile(channel: Dict[str, Any], profile: Dict[str, Any]) -> bool:
         ids = profile.get("ids")
-        if ids and channel.get("id") not in [int(value) for value in ids]:
-            return False
+        if ids:
+            try:
+                accepted_ids = {int(value) for value in ids}
+            except (TypeError, ValueError):
+                return False
+            if channel.get("id") not in accepted_ids:
+                return False
         for field in ("country", "state", "city", "category", "status", "group_title"):
             values = profile.get(field)
             if values and values != "todos":
@@ -237,14 +266,13 @@ class PlaylistManager:
         cfg = self.config_mgr.get_all()
         user_agent = cfg["USER_AGENT"]
         timeout = cfg["REQUEST_TIMEOUT"]
-        concurrency = cfg["CONCURRENCY_LIMIT"]
-        max_limit = cfg["MAX_CHANNELS_PER_FILE"]
+        concurrency = max(1, int(cfg["CONCURRENCY_LIMIT"]))
+        max_limit = max(1, int(cfg["MAX_CHANNELS_PER_FILE"]))
         base_url = cfg["PUBLIC_BASE_URL"]
 
         if progress_callback:
             progress_callback("Lendo e deduplicando canais locais e remotos...")
 
-        # 1. Ingestao e classificacao taxonômica
         raw_channels = await self.load_all_sources()
         if control_callback:
             control_callback("fontes carregadas")
@@ -262,50 +290,26 @@ class PlaylistManager:
             ch.setdefault("city", "Geral")
             self.db.upsert_channel(ch)
 
-        # 2. Resgate de todos os canais para teste assincrono
         channels_to_test = self.db.list_channels()
         total_channels = len(channels_to_test)
-
         if total_channels == 0:
             return {"total": 0, "online": 0, "offline": 0, "partitions": []}
 
         if progress_callback:
             progress_callback(f"Testando {total_channels} canais unicos (concorrencia: {concurrency})...")
 
-        semaphore = asyncio.Semaphore(concurrency)
-        connector = aiohttp.TCPConnector(
-            ssl=create_unverified_ssl_context(),
-            limit=concurrency,
-            ttl_dns_cache=300,
-            force_close=True
-        )
-
-        async with aiohttp.ClientSession(connector=connector) as session:
-            tasks = [test_stream(session, ch, semaphore, user_agent, timeout) for ch in channels_to_test]
-            results = await asyncio.gather(*tasks)
-
+        valid_list, invalid_list = await self.validate_all_channels(channels_to_test)
         if control_callback:
             control_callback("verificação concluída")
 
-        valid_list = []
-        invalid_list = []
+        for channel in valid_list:
+            self.db.update_channel_status(channel["url"], "online", channel.get("latency_ms", 0), channel.get("http_status", 0))
+        for channel in invalid_list:
+            self.db.update_channel_status(channel["url"], "offline", channel.get("latency_ms", 0), channel.get("http_status", 0))
 
-        for channel, is_valid, latency, status_code in results:
-            status_str = "online" if is_valid else "offline"
-            self.db.update_channel_status(channel["url"], status_str, latency, status_code)
-            ch_info = {**channel, "latency_ms": latency, "http_status": status_code}
-            if is_valid:
-                valid_list.append(ch_info)
-            else:
-                invalid_list.append(ch_info)
-
-        # 3. Canais offline permanecem no banco para preservar histórico e permitir
-        # revalidação automática. A opção auto_remove_if_offline controla apenas
-        # regras de publicação/uso futuro; nunca apagamos registros silenciosamente.
         if progress_callback:
             progress_callback("Mantendo canais inoperantes no banco para revalidação...")
 
-        # 4. Publicação controlada: a auditoria não publica arquivos por padrão.
         publication_mode = (publication_mode or "NONE").upper()
         active_channels = [c for c in self.db.list_channels() if c["status"] == "online"]
         if publication_mode == "NONE":
@@ -314,92 +318,11 @@ class PlaylistManager:
             log_path = self.generate_audit_log(total_channels, valid_list, invalid_list, [])
             return {"total": total_channels, "online": len(valid_list), "offline": len(invalid_list), "partitions": [], "log_file": os.path.basename(log_path), "publication_mode": publication_mode}
 
-        # 5. Particionamento em lotes de no máximo 400 canais.
-        # IMPORTANTE: Inclui TODOS os canais operantes.
-
-        if control_callback:
-            control_callback("preparando listas")
-
         if progress_callback:
-            progress_callback(f"Particionando {len(active_channels)} canais ativos (limite: {max_limit}/lista)...")
-
-        # Limpa arquivos antigos da pasta output/
-        for f in glob.glob(os.path.join(self.output_dir, "*.*")):
-            try:
-                os.remove(f)
-            except OSError:
-                pass
-
-        # Ingestao do EPG mestre cadastrado
-        epg_urls = [u.strip() for u in cfg.get("EPG_URLS", "").split(";") if u.strip().startswith("http")]
-        master_epg_data = ""
-        for e_url in epg_urls:
-            raw_xml = await EPGManager.fetch_and_extract_epg(e_url, user_agent)
-            if raw_xml:
-                master_epg_data = raw_xml
-                break
-
-        created_manifests = []
-        chunks = [active_channels[i:i + max_limit] for i in range(0, len(active_channels), max_limit)]
-
-        for idx, chunk in enumerate(chunks, start=1):
-            if control_callback:
-                control_callback(f"gerando lista {idx}")
-            m3u_name = f"playlist_parte_{idx:02d}.m3u"
-            xml_name = f"epg_parte_{idx:02d}.xml"
-
-            m3u_path = os.path.join(self.output_dir, m3u_name)
-            xml_path = os.path.join(self.output_dir, xml_name)
-
-            epg_public_url = f"{base_url}/epg/{xml_name}"
-            m3u_public_url = f"{base_url}/playlist/{m3u_name}"
-
-            # Gera XML do EPG para o lote
-            EPGManager.slice_epg_for_chunk(master_epg_data, chunk, xml_path)
-
-            # Gera M3U correspondente
-            with open(m3u_path, "w", encoding="utf-8") as f:
-                f.write(f'#EXTM3U url-tvg="{epg_public_url}"\n')
-                for ch in chunk:
-                    f.write(f'{ch["metadata"]}\n{ch["url"]}\n')
-
-            created_manifests.append({
-                "m3u_name": m3u_name,
-                "m3u_url": m3u_public_url,
-                "xml_name": xml_name,
-                "xml_url": epg_public_url,
-                "total": len(chunk)
-            })
-
-        # 5. Gravacao obrigatoria do relatorio de auditoria JSON em logs/
-        log_path = self.generate_audit_log(total_channels, valid_list, invalid_list, created_manifests)
-
-        return {
-            "total": total_channels,
-            "online": len(valid_list),
-            "offline": len(invalid_list),
-            "partitions": created_manifests,
-            "log_file": os.path.basename(log_path)
-        }
-
-    def generate_audit_log(self, total: int, valid: List[Dict[str, Any]], invalid: List[Dict[str, Any]], manifests: List[Dict[str, Any]]) -> str:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_path = os.path.join(self.logs_dir, f"auditoria_{timestamp}.json")
-
-        report = {
-            "timestamp": datetime.now().isoformat(),
-            "metricas": {
-                "total_extraido": total,
-                "total_operante": len(valid),
-                "total_inoperante_removido": len(invalid),
-                "taxa_disponibilidade_pct": round((len(valid) / total * 100), 2) if total > 0 else 0
-            },
-            "arquivos_gerados": manifests,
-            "canais_operantes": [{"nome": c["name"], "url": c["url"], "latencia_ms": c.get("latency_ms", 0)} for c in valid],
-            "canais_removidos": [{"nome": c["name"], "url": c["url"], "http_status": c.get("http_status", 0)} for c in invalid]
-        }
-
-        with open(log_path, "w", encoding="utf-8") as f:
-            json.dump(report, f, indent=4, ensure_ascii=False)
-
-        return log_path
+            progress_callback(f"Gerando playlists para {len(active_channels)} canais operantes...")
+        manifests = await self._generate_output_partitions(active_channels, {"limit": max_limit, "preserve_existing": False})
+        created = [m["m3u_name"] for m in manifests]
+        log_path = self.generate_audit_log(total_channels, valid_list, invalid_list, created)
+        if control_callback:
+            control_callback("concluído")
+        return {"total": total_channels, "online": len(valid_list), "offline": len(invalid_list), "partitions": manifests, "log_file": os.path.basename(log_path), "publication_mode": publication_mode, "total_raw": total_raw}

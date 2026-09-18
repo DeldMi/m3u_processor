@@ -10,7 +10,7 @@
     ],
     "scripts": {
         "setup": "node ./scripts/setup.js",
-        "upgit":"git pull origin main",
+        "upgit":"git pull # origin main",
         "dev": "node ./scripts/run-dev.js",
         "start": "node ./scripts/run-prod.js",
         "build": "node ./scripts/build.js",

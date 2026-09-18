@@ -1,0 +1,10 @@
+.theme-designer{min-width:min(980px,82vw)}
+.theme-designer-sections{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--theme-line)}
+.theme-designer-sections button{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--theme-line);background:var(--theme-menu);color:var(--theme-ink);border-radius:8px;padding:8px 11px;cursor:pointer}
+.theme-designer-sections button.active{border-color:var(--theme-accent);color:var(--theme-accent)}
+.theme-designer-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,42%);gap:18px}
+.theme-options{min-width:0}
+.theme-live-preview{min-height:330px;border:1px solid;border-radius:12px;padding:20px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.15)}
+.theme-live-preview small{font-weight:700;letter-spacing:.08em}
+.theme-preview-brand{display:flex;align-items:center;gap:10px;margin:18px 0}.theme-preview-brand img{width:40px;height:40px;object-fit:contain;border-radius:7px}.theme-preview-buttons{display:flex;gap:8px;margin-top:20px}.theme-preview-buttons button{border-radius:7px;padding:8px 12px;cursor:pointer}
+@media (max-width:800px){.theme-designer{min-width:0}.theme-designer-grid{grid-template-columns:1fr}.theme-live-preview{min-height:260px}}

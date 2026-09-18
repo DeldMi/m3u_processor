@@ -459,6 +459,14 @@ A próxima etapa do projeto deve implementar e validar, nesta ordem:
 11. Testes de segurança para garantir que ocultar elementos no frontend não seja a única proteção.
 12. Revalidar `npm run test`, `npm run typecheck`, `npm run verify`, execução real e Docker após cada conjunto de mudanças.
 13. Só considerar a versão pronta após validar instalação limpa, execução, funcionalidades, autorização e empacotamento.
+14. no .env so tem que ter informaçoes de abiente o que precisa para o projeto inicia e ja fica fuionado o resto pode fica no db e o projeto ja vem pre configurado com campos obrigatorios penenchido para iviatr erros na intalação do db.
+15. A parte de tema onde voce criar tem que ser parecido com o do usuario so que com foco diferente tipo voce cai criando e vai apareseno pode ser editado as ciação novas as do sitema recomando nao ser editavel pode ser copiada.
+16. na pagina tinha alguma fuções e opiçoes antes e agora nao tem mas .
+nao consigo acesa o porjeto localmente so remoto (Loading module from “http://localhost:5000/assets/index-DRRGoslW.js” was blocked because of a disallowed MIME type (“text/html”). localhost:5000
+Layout was forced before the page was fully loaded. If stylesheets are not yet loaded this may cause a flash of unstyled content. index.js:1583:1
+Loading failed for the module with source “http://localhost:5000/assets/index-DRRGoslW.js”. localhost:5000:9:69
+Loading module from “http://localhost:5000/assets/index-DRRGoslW.js” was blocked because of a disallowed MIME type (“text/html”). }. e na porta 5173 so fuciona a pagina principal {The server is configured with a public base URL of /app-assets/ - did you mean to visit /app-assets/channels instead?}.
+
 
 ## Prioridades gerais
 
@@ -474,3 +482,4 @@ A próxima etapa do projeto deve implementar e validar, nesta ordem:
 10. Tutoriais e ajuda contextual.
 11. Manutenção, diagnóstico e auditoria.
 12. Desempenho para grandes volumes.
+13. as fuionablidade sempre tem que continuar a nao ser que eu pessa para tirar. ela pode ser remanejada com intuito de organização, sematico, desigino e requisito basico de progamação.

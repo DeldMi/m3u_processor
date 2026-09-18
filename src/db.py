@@ -35,6 +35,12 @@ class Database:
                 cursor.execute("INSERT INTO users(username,password_hash,role) VALUES(?,?,?)",('admin',generate_password_hash(password),'admin'))
             conn.commit()
 
+    def get_user(self,user_id:int)->Optional[Dict[str,Any]]:
+        """Retorna um usuário pelo ID sem expor a senha em APIs de domínio."""
+        with self.get_connection() as conn:
+            row=conn.execute("SELECT * FROM users WHERE id=?",(int(user_id),)).fetchone()
+            return dict(row) if row else None
+
     def upsert_channel(self,ch:Dict[str,Any]):
         record={"url":ch.get("url",""),"channel_number":ch.get("channel_number"),"name":ch.get("name","Canal Desconhecido"),"metadata":ch.get("metadata",""),"tvg_id":ch.get("tvg_id",""),"logo":ch.get("logo",""),"group_title":ch.get("group_title",""),"country":ch.get("country","Outros"),"state":ch.get("state","Nacional/Geral"),"city":ch.get("city","Geral"),"category":ch.get("category","tv"),"auto_remove_if_offline":int(ch.get("auto_remove_if_offline",1))}
         with self.get_connection() as conn:

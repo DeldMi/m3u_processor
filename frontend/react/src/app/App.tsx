@@ -5,7 +5,11 @@ import type {User} from "../types";
 import {hasPermission,Shell,Login} from "../components/Common";
 import {ThemeProvider} from "../components/ThemeProvider";
 import {Dashboard} from "../features/dashboard/DashboardPage";
-import {ChannelsV2} from "../features/channels/ChannelsPageV2";
+// A página completa de Canais preserva filtros, seleção, colunas,
+// ordenação, edição, ações operacionais e criação de playlists.
+// ChannelsPageV2 é mantida no repositório para referência/compatibilidade,
+// mas não deve substituir a implementação completa sem solicitação explícita.
+import {Channels} from "../features/channels/ChannelsPage";
 import {Playlists} from "../features/playlists/PlaylistsPage";
 import {SettingsHubPage} from "../features/settings/SettingsHubPage";
 import {ResourceSettingsPage} from "../features/settings/ResourceSettingsPage";
@@ -35,7 +39,7 @@ export function App(){
     const route=ROUTES[path as keyof typeof ROUTES];
     if(route&&!hasPermission(user,route[0],route[1]))return <ThemeProvider userKey={user.username}><Shell user={user}><Forbidden path={path}/><Player/></Shell></ThemeProvider>;
     let content:ReactNode=<Dashboard user={user}/>;
-    if(path==="/channels")content=<ChannelsV2 user={user}/>;
+    if(path==="/channels")content=<Channels user={user}/>;
     if(path==="/playlists")content=<Playlists user={user}/>;
     if(path==="/settings")content=<SettingsHubPage/>;
     if(path==="/settings/resources")content=<ResourceSettingsPage/>;

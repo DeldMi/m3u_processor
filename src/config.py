@@ -2,6 +2,10 @@ import os
 from dotenv import dotenv_values, set_key
 
 class ConfigManager:
+    # Nunca devolver estes valores para a interface administrativa. Eles são
+    # credenciais/segredos e devem permanecer somente no ambiente do servidor.
+    SECRET_KEYS = frozenset({"SECRET_KEY", "API_TOKEN"})
+
     def __init__(self, root_dir: str):
         self.root_dir = root_dir
         self.env_path = os.path.join(root_dir, ".env")
@@ -68,5 +72,13 @@ class ConfigManager:
             "PUBLIC_PORT": self._safe_int(os.getenv("PUBLIC_PORT", config.get("PUBLIC_PORT", 8080)), 8080)
         }
 
+    def get_public(self) -> dict:
+        """Retorna apenas configurações que podem ser exibidas no frontend."""
+        return {key: value for key, value in self.get_all().items() if key not in self.SECRET_KEYS}
+
     def update_key(self, key: str, value: str):
+        # A API de configuração pode gravar somente chaves conhecidas. Isso
+        # evita que payloads arbitrários criem variáveis de ambiente inesperadas.
+        if key not in self.get_all():
+            raise KeyError(f"Configuração desconhecida: {key}")
         set_key(self.env_path, key, str(value))

@@ -14,16 +14,24 @@ class ConfigManagerTests(unittest.TestCase):
             self.assertEqual(values["MAX_CHANNELS_PER_FILE"], 400)
             self.assertEqual(values["WEB_PORT"], 5000)
             self.assertEqual(values["SCHEDULE_MODE"], "DISABLED")
-
+            self.assertTrue(values["SECRET_KEY"])
 
     def test_public_config_never_contains_secrets(self):
         with tempfile.TemporaryDirectory() as tmp:
             cfg = ConfigManager(tmp)
-            cfg.update_key("SECRET_KEY", "secret-value")
-            cfg.update_key("API_TOKEN", "token-value")
             public = cfg.get_public()
             self.assertNotIn("SECRET_KEY", public)
             self.assertNotIn("API_TOKEN", public)
+            self.assertNotIn("ADMIN_INITIAL_PASSWORD", public)
+
+    def test_protected_settings_cannot_be_changed_through_public_config_writer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = ConfigManager(tmp)
+            with self.assertRaises(PermissionError):
+                cfg.update_key("SECRET_KEY", "secret-value")
+            with self.assertRaises(PermissionError):
+                cfg.update_key("API_TOKEN", "token-value")
+
 
 class PlaylistManagerTests(unittest.TestCase):
     def test_load_input_channels_reads_m3u(self):

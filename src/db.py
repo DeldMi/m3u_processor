@@ -1,5 +1,7 @@
 import os
 import sqlite3
+import secrets
+from dotenv import dotenv_values
 from typing import Optional, List, Dict, Any
 from werkzeug.security import generate_password_hash
 
@@ -102,7 +104,15 @@ class Database:
             """)
             cursor.execute("SELECT COUNT(*) FROM users;")
             if cursor.fetchone()[0] == 0:
-                default_hash = generate_password_hash("admin123")
+                env_path = os.path.join(os.path.dirname(os.path.dirname(self.db_path)), ".env")
+                initial_password = str(dotenv_values(env_path).get("ADMIN_INITIAL_PASSWORD") or "").strip()
+                # Instalações novas nunca recebem uma senha administrativa
+                # pública/fixa. O setup grava ADMIN_INITIAL_PASSWORD; se o banco
+                # for inicializado manualmente, geramos uma senha única.
+                if not initial_password:
+                    initial_password = secrets.token_urlsafe(18)
+                    print(f"[M3U Processor] Senha inicial do admin gerada: {initial_password}")
+                default_hash = generate_password_hash(initial_password)
                 cursor.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?);", ("admin", default_hash, "admin"))
             conn.commit()
 

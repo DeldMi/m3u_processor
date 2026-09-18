@@ -1,13 +1,31 @@
 import os
+import secrets
 from dotenv import dotenv_values, set_key
 
+
 class ConfigManager:
+    """Leitor/escritor central de configuração do aplicativo."""
+
+    # Estes valores jamais devem ser devolvidos ao frontend.
+    SECRET_KEYS = frozenset({"SECRET_KEY", "API_TOKEN", "ADMIN_INITIAL_PASSWORD"})
+
     def __init__(self, root_dir: str):
         self.root_dir = root_dir
         self.env_path = os.path.join(root_dir, ".env")
         if not os.path.exists(self.env_path):
             with open(self.env_path, "w", encoding="utf-8") as f:
                 f.write("# Configuracao Inicial\n")
+        self._ensure_secret("SECRET_KEY", 48)
+
+    def _ensure_secret(self, key: str, byte_length: int):
+        """Garante segredo persistente para evitar fallback público/fixo."""
+        config = dotenv_values(self.env_path)
+        if not str(config.get(key) or "").strip():
+            set_key(self.env_path, key, secrets.token_urlsafe(byte_length))
+            try:
+                os.chmod(self.env_path, 0o600)
+            except OSError:
+                pass
 
     @staticmethod
     def _safe_int(value, default):
@@ -19,8 +37,10 @@ class ConfigManager:
     def get_all(self) -> dict:
         config = dotenv_values(self.env_path)
         return {
-            "SECRET_KEY": config.get("SECRET_KEY", "m3u_processor_secret_key_fixed"),
+            "SECRET_KEY": config.get("SECRET_KEY", ""),
             "API_TOKEN": config.get("API_TOKEN", ""),
+            "ADMIN_INITIAL_PASSWORD": config.get("ADMIN_INITIAL_PASSWORD", ""),
+            "ALLOW_INSECURE_TLS": str(config.get("ALLOW_INSECURE_TLS", "0")).strip().lower() in {"1", "true", "yes"},
             "MAX_CHANNELS_PER_FILE": self._safe_int(config.get("MAX_CHANNELS_PER_FILE", 400), 400),
             "CONCURRENCY_LIMIT": self._safe_int(config.get("CONCURRENCY_LIMIT", 50), 50),
             "REQUEST_TIMEOUT": self._safe_int(config.get("REQUEST_TIMEOUT", 6), 6),
@@ -65,8 +85,17 @@ class ConfigManager:
             "WEB_HOST": os.getenv("WEB_HOST", config.get("WEB_HOST", "0.0.0.0")),
             "WEB_PORT": self._safe_int(os.getenv("WEB_PORT", config.get("WEB_PORT", 5000)), 5000),
             "PUBLIC_HOST": os.getenv("PUBLIC_HOST", config.get("PUBLIC_HOST", "0.0.0.0")),
-            "PUBLIC_PORT": self._safe_int(os.getenv("PUBLIC_PORT", config.get("PUBLIC_PORT", 8080)), 8080)
+            "PUBLIC_PORT": self._safe_int(os.getenv("PUBLIC_PORT", config.get("PUBLIC_PORT", 8080)), 8080),
+            "CUSTOM_THEMES": config.get("CUSTOM_THEMES", "[]"),
         }
 
+    def get_public(self) -> dict:
+        """Retorna somente configurações que podem ser exibidas pela SPA."""
+        return {key: value for key, value in self.get_all().items() if key not in self.SECRET_KEYS}
+
     def update_key(self, key: str, value: str):
+        if key in self.SECRET_KEYS:
+            raise PermissionError(f"Configuração protegida: {key}")
+        if key not in self.get_all():
+            raise KeyError(f"Configuração desconhecida: {key}")
         set_key(self.env_path, key, str(value))

@@ -500,3 +500,19 @@ Loading module from “http://localhost:5000/assets/index-DRRGoslW.js” was blo
 13. as fuionablidade sempre tem que continuar a nao ser que eu pessa para tirar. ela pode ser remanejada com intuito de organização, sematico, desigino e requisito basico de progamação.
 
 14. A base deste porjeto e analizar, testar, prosesalo e gera links tem que ter uma administrção compreta (Analise teste edição criação etc).
+
+## Correcoes criticas — 2026-09-17
+
+- Canais OFFLINE permanecem no banco durante sincronizacao; remocao persistida deve ser uma acao explicita do usuario.
+- Rotas criticas de canais e playlists usam autorizacao granular por recurso/acao no backend.
+- A API de configuracao nao retorna credenciais sensiveis e rejeita chaves desconhecidas.
+- Relatorios de auditoria nao devem registrar o ambiente inteiro nem credenciais.
+- Flask aceita os prefixes `/app-assets/*` e `/assets/*` para compatibilidade com builds React anteriores.
+- O parser M3U normaliza atributos IPTV comuns e aceita aspas simples ou duplas.
+- Foram adicionados testes para parser, RBAC e configuracao publica.
+- Nenhuma funcionalidade existente deve ser removida; reorganizacao deve preservar o fluxo equivalente.
+
+- TLS de saida foi endurecido: validacao de certificado agora e padrao; certificados invalidos exigem ALLOW_INSECURE_TLS=1.
+- Bancos novos nao recebem mais a senha fixa admin123: o setup gera ADMIN_INITIAL_PASSWORD aleatoria e a grava no .env; banco criado manualmente gera uma senha unica no primeiro start.
+- ADMIN_INITIAL_PASSWORD tambem e tratado como segredo e nunca deve aparecer na API publica de configuracao.
+- Cliente HTTP React agora diferencia erro de rede, HTTP e resposta JSON da API.

@@ -49,10 +49,10 @@ O fluxo geral é:
 
 ## Acesso inicial
 
-Credenciais padrão:
+Credencial inicial:
 
 - usuário: `admin`
-- senha: `admin123`
+- senha: a senha aleatória exibida/criada pelo `npm run setup` em `ADMIN_INITIAL_PASSWORD` no `.env`
 
 ## Instalação rápida
 

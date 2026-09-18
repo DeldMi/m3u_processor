@@ -1,4 +1,5 @@
 import os
+import hmac
 from datetime import datetime
 from functools import wraps
 from flask import session, abort, redirect, url_for, request, current_app
@@ -12,12 +13,17 @@ ROUTE_PERMISSIONS = {
     "api_get_playlists": ("playlists", "view"), "api_delete_playlists": ("playlists", "delete"),
     "api_rename_playlist": ("playlists", "edit"), "api_get_channels": ("channels", "view"),
     "api_channel_options": ("channels", "view"), "api_upload_channel_logo": ("channels", "edit"),
+    "create_channel": ("channels", "create"), "delete_channel": ("channels", "delete"),
+    "api_update_channel": ("channels", "edit"), "api_toggle_channel_status": ("channels", "edit"),
+    "api_toggle_autoremove": ("channels", "edit"),
     "api_users": ("users", "view"), "api_update_user": ("users", "edit"),
     "api_update_profile": ("users", "edit"), "api_admin_restart": ("system", "admin"),
     "api_admin_shutdown": ("system", "admin"), "api_update_channel": ("channels", "edit"),
-    "api_generate_custom_playlist": ("playlists", "create"), "api_toggle_channel_status": ("channels", "edit"),
+    "api_generate_custom_playlist": ("playlists", "create"),
+    "api_delete_playlists": ("playlists", "delete"), "api_rename_playlist": ("playlists", "edit"), "api_toggle_channel_status": ("channels", "edit"),
     "api_toggle_autoremove": ("channels", "edit"), "api_trigger_sync": ("sync", "execute"),
     "api_save_config": ("settings", "admin"), "api_get_config": ("settings", "view"),
+    "api_generate_custom_playlist": ("playlists", "create"),
     "view_users": ("users", "view"), "view_settings": ("settings", "view"),
     "view_channels": ("channels", "view"), "view_playlists": ("playlists", "view"),
     "view_dashboard": ("dashboard", "view"),
@@ -94,7 +100,7 @@ def _api_token_is_valid() -> bool:
     from src.config import ConfigManager
     root_dir = os.path.abspath(os.path.join(current_app.root_path, ".."))
     configured = str(ConfigManager(root_dir).get_all().get("API_TOKEN") or "").strip()
-    return bool(configured and token == configured)
+    return bool(configured and hmac.compare_digest(token, configured))
 
 
 def _permission_denied(permission):

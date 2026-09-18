@@ -498,3 +498,15 @@ Loading module from “http://localhost:5000/assets/index-DRRGoslW.js” was blo
 11. Manutenção, diagnóstico e auditoria.
 12. Desempenho para grandes volumes.
 13. as fuionablidade sempre tem que continuar a nao ser que eu pessa para tirar. ela pode ser remanejada com intuito de organização, sematico, desigino e requisito basico de progamação.
+
+
+## Correcoes criticas — 2026-09-17
+
+- Canais OFFLINE permanecem no banco durante sincronizacao; remocao persistida deve ser uma acao explicita do usuario.
+- Rotas criticas de canais e playlists usam autorizacao granular por recurso/acao no backend.
+- A API de configuracao nao retorna credenciais sensiveis e rejeita chaves desconhecidas.
+- Relatorios de auditoria nao devem registrar o ambiente inteiro nem credenciais.
+- Flask aceita os prefixes `/app-assets/*` e `/assets/*` para compatibilidade com builds React anteriores.
+- O parser M3U normaliza atributos IPTV comuns e aceita aspas simples ou duplas.
+- Foram adicionados testes para parser, RBAC e configuracao publica.
+- Nenhuma funcionalidade existente deve ser removida; reorganizacao deve preservar o fluxo equivalente.

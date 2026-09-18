@@ -57,7 +57,14 @@ def register_monitoring_routes(app, manager, process_state, process_logs, notifi
         theme = data.get("theme")
         if not name or not isinstance(theme, dict):
             return jsonify({"error": "Nome e tema são obrigatórios."}), 400
-        theme = {k: str(theme.get(k, "")) for k in ("bg", "surface", "line", "ink", "muted", "accent", "success", "danger", "menu", "login")}
+
+        # Mantemos as variáveis visuais existentes e aceitamos as novas opções
+        # de tipografia e identidade sem quebrar temas antigos.
+        theme_keys = (
+            "bg", "surface", "line", "ink", "muted", "accent", "success", "danger", "menu", "login",
+            "fontFamily", "fontSize", "headingScale", "siteName", "logo", "title", "h1", "h2", "h3",
+        )
+        theme = {k: str(theme.get(k, "")) for k in theme_keys}
         theme.update({"id": f"custom-{int(time.time() * 1000)}", "name": name, "description": str(data.get("description", "")).strip()})
         try:
             themes = json.loads(str(manager.config_mgr.get_all().get("CUSTOM_THEMES", "[]")))

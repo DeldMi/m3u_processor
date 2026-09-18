@@ -179,7 +179,14 @@ def api_me():
 
 
 @app.route("/app-assets/<path:filename>")
+@app.route("/assets/<path:filename>")
 def react_assets(filename):
+    """Serve os assets do build React nos dois prefixes usados historicamente.
+
+    Builds anteriores usavam /assets enquanto o Flask passou a publicar a
+    SPA em /app-assets. Manter os dois caminhos evita que uma instalação
+    com dist antigo devolva o index.html como JavaScript (erro MIME).
+    """
     return send_from_directory(REACT_DIR, filename)
 
 

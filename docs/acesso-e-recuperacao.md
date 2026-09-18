@@ -5,7 +5,7 @@
 O sistema provisiona um usuário administrador inicial assim que o banco é criado:
 
 - usuário: `admin`
-- senha: `admin123`
+- senha: definida por `ADMIN_INITIAL_PASSWORD`; o `npm run setup` gera uma senha aleatória para instalações novas.
 
 ## Como acessar
 

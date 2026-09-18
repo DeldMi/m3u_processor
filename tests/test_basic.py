@@ -16,6 +16,15 @@ class ConfigManagerTests(unittest.TestCase):
             self.assertEqual(values["SCHEDULE_MODE"], "DISABLED")
 
 
+    def test_public_config_never_contains_secrets(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = ConfigManager(tmp)
+            cfg.update_key("SECRET_KEY", "secret-value")
+            cfg.update_key("API_TOKEN", "token-value")
+            public = cfg.get_public()
+            self.assertNotIn("SECRET_KEY", public)
+            self.assertNotIn("API_TOKEN", public)
+
 class PlaylistManagerTests(unittest.TestCase):
     def test_load_input_channels_reads_m3u(self):
         with tempfile.TemporaryDirectory() as tmp:

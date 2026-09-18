@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Tuple
 from src.parser import M3UParser
 from src.classifier import StreamClassifier
-from src.checker import test_stream, create_unverified_ssl_context
+from src.checker import test_stream, create_ssl_context
 from src.epg import EPGManager
 from src.config import ConfigManager
 from src.db import Database
@@ -46,7 +46,7 @@ class PlaylistManager:
             return [], []
         cfg = self.config_mgr.get_all()
         semaphore = asyncio.Semaphore(max(1, cfg["CONCURRENCY_LIMIT"]))
-        connector = aiohttp.TCPConnector(ssl=create_unverified_ssl_context(), limit=max(1, cfg["CONCURRENCY_LIMIT"]), ttl_dns_cache=300)
+        connector = aiohttp.TCPConnector(ssl=create_ssl_context(bool(cfg.get("ALLOW_INSECURE_TLS", False))), limit=max(1, cfg["CONCURRENCY_LIMIT"]), ttl_dns_cache=300)
         async with aiohttp.ClientSession(connector=connector) as session:
             tasks = [test_stream(session, ch, semaphore, cfg["USER_AGENT"], cfg["REQUEST_TIMEOUT"]) for ch in channels]
             results = await asyncio.gather(*tasks)
@@ -150,7 +150,7 @@ class PlaylistManager:
         cfg = self.config_mgr.get_all()
         remote_urls = [u.strip() for u in cfg.get("REMOTE_M3U_URLS", "").split(";") if u.strip().startswith("http")]
         if remote_urls:
-            connector = aiohttp.TCPConnector(ssl=create_unverified_ssl_context(), ttl_dns_cache=300)
+            connector = aiohttp.TCPConnector(ssl=create_ssl_context(bool(cfg.get("ALLOW_INSECURE_TLS", False))), ttl_dns_cache=300)
             async with aiohttp.ClientSession(connector=connector) as session:
                 tasks = [self._fetch_remote_m3u(session, u) for u in remote_urls]
                 results = await asyncio.gather(*tasks)
@@ -299,10 +299,11 @@ class PlaylistManager:
             else:
                 invalid_list.append(ch_info)
 
-        # 3. Expurgo dos canais fora do ar que possuem auto_remove_if_offline ativo
+        # 3. Canais offline permanecem no banco para preservar histórico e permitir
+        # revalidação automática. A opção auto_remove_if_offline controla apenas
+        # regras de publicação/uso futuro; nunca apagamos registros silenciosamente.
         if progress_callback:
-            progress_callback("Removendo canais inoperantes do banco...")
-        self.db.delete_purged_channels()
+            progress_callback("Mantendo canais inoperantes no banco para revalidação...")
 
         # 4. Publicação controlada: a auditoria não publica arquivos por padrão.
         publication_mode = (publication_mode or "NONE").upper()
@@ -387,7 +388,6 @@ class PlaylistManager:
 
         report = {
             "timestamp": datetime.now().isoformat(),
-            "configuracoes": self.config_mgr.get_all(),
             "metricas": {
                 "total_extraido": total,
                 "total_operante": len(valid),

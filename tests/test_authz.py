@@ -59,6 +59,12 @@ class AuthorizationTests(unittest.TestCase):
         self.assertEqual(ROUTE_METHOD_PERMISSIONS["api_users"]["GET"], ("users", "view"))
         self.assertEqual(ROUTE_METHOD_PERMISSIONS["api_users"]["POST"], ("users", "create"))
 
+    def test_critical_channel_routes_use_granular_actions(self):
+        self.assertEqual(_route_permission("create_channel"), ("channels", "create"))
+        self.assertEqual(_route_permission("delete_channel"), ("channels", "delete"))
+        self.assertEqual(_route_permission("api_update_channel"), ("channels", "edit"))
+        self.assertEqual(_route_permission("api_generate_custom_playlist"), ("playlists", "create"))
+
     def test_route_permission_fails_closed_for_unknown_method(self):
         # A chamada fora da matriz explícita não deve herdar a permissão de GET.
         self.assertIsNone(ROUTE_METHOD_PERMISSIONS["api_users"].get("DELETE"))

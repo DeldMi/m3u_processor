@@ -179,7 +179,14 @@ def api_me():
 
 
 @app.route("/app-assets/<path:filename>")
+@app.route("/assets/<path:filename>")
 def react_assets(filename):
+    """Serve os assets do build React nos dois prefixes usados historicamente.
+
+    Builds anteriores usavam /assets enquanto o Flask passou a publicar a
+    SPA em /app-assets. Manter os dois caminhos evita que uma instalação
+    com dist antigo devolva o index.html como JavaScript (erro MIME).
+    """
     return send_from_directory(REACT_DIR, filename)
 
 
@@ -473,13 +480,25 @@ def api_trigger_sync():
 @require_role("admin")
 def api_save_config():
     data = request.json or {}
-    for k, v in data.items(): manager.config_mgr.update_key(k, v)
-    setup_scheduler(); add_process_log("Configurações salvas com sucesso.", "success"); return jsonify({"status": "atualizado"})
+    if not isinstance(data, dict):
+        return jsonify({"error": "Configuração inválida."}), 400
+    known = set(manager.config_mgr.get_all())
+    unknown = sorted(set(data) - known)
+    if unknown:
+        return jsonify({"error": "Configuração desconhecida.", "keys": unknown}), 400
+    try:
+        for key, value in data.items():
+            manager.config_mgr.update_key(key, value)
+    except (KeyError, OSError, ValueError) as exc:
+        return jsonify({"error": f"Não foi possível salvar a configuração: {exc}"}), 400
+    setup_scheduler()
+    add_process_log("Configurações salvas com sucesso.", "success")
+    return jsonify({"status": "atualizado"})
 
 
 @app.route("/api/config", methods=["GET"])
 @require_role("admin")
-def api_get_config(): return jsonify(manager.config_mgr.get_all())
+def api_get_config(): return jsonify(manager.config_mgr.get_public())
 
 
 @app.route("/playlist/<filename>")

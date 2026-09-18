@@ -1,4 +1,5 @@
 const { spawnSync } = require('node:child_process');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -76,6 +77,15 @@ function ensureNode() {
     if (!findCommand(['node'])) fail('Node.js não encontrado. Instale Node.js 18+ e execute o setup novamente.');
 }
 
+function ensureInitialAdminPassword() {
+    const envPath = path.join(rootDir, '.env');
+    if (!fs.existsSync(envPath)) return;
+    const current = fs.readFileSync(envPath, 'utf8');
+    if (/^ADMIN_INITIAL_PASSWORD\\s*=\\s*['"]?[^'"]+['"]?\\s*$/m.test(current)) return;
+    const password = crypto.randomBytes(18).toString('base64url');
+    fs.appendFileSync(envPath, `\\nADMIN_INITIAL_PASSWORD='${password}'\\n`, 'utf8');
+    log('[OK] Senha inicial do administrador criada em .env.');
+}
 function ensureEnvFile() {
     const envPath = path.join(rootDir, '.env');
     const examplePath = path.join(rootDir, '.env.example');
@@ -184,6 +194,7 @@ function main() {
     log('=== M3U Processor - Setup ===');
     ensureNode();
     ensureEnvFile();
+    ensureInitialAdminPassword();
     const systemPython = getSystemPython();
     const venvPython = ensureVenv(systemPython);
     installPythonDeps(venvPython);

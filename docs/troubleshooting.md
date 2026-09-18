@@ -68,10 +68,10 @@ Verifique:
 - se o banco SQLite foi criado em `data/app.db`
 - se o `admin` ainda existe
 
-Credenciais padrão:
+Credencial inicial:
 
 - usuário: `admin`
-- senha: `admin123`
+- senha: a senha aleatória exibida/criada pelo `npm run setup` em `ADMIN_INITIAL_PASSWORD` no `.env`
 
 Se perdeu a senha ou o usuário foi removido, veja o guia de recuperação.
 

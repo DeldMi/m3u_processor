@@ -4,12 +4,19 @@ import asyncio
 import aiohttp
 from typing import Dict, Any, Tuple
 
-def create_unverified_ssl_context() -> ssl.SSLContext:
-    """Cria contexto SSL que ignora certificados expirados ou autoassinados."""
+def create_ssl_context(allow_insecure: bool = False) -> ssl.SSLContext:
+    """Cria TLS seguro por padrão; permite certificados inválidos somente por opção explícita."""
+    if not allow_insecure:
+        return ssl.create_default_context()
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     return ctx
+
+
+# Compatibilidade para integrações antigas; não deve ser usada em novos fluxos.
+def create_unverified_ssl_context() -> ssl.SSLContext:
+    return create_ssl_context(allow_insecure=True)
 
 async def test_stream(
     session: aiohttp.ClientSession, 

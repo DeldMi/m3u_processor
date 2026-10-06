@@ -48,62 +48,56 @@ m3u_processor/
 └── docs/
 ```
 
-## Instalação no Linux
+## Instalação no Linux, macOS e Windows
 
-### 1. Clonar ou abrir o projeto
+### 1. Verificar requisitos
 
-```bash
-cd /caminho/para/o/projeto
-```
+- Python 3.11 ou superior;
+- Node.js 20/22 LTS;
+- npm;
+- Git somente para desenvolvimento e instalação a partir do repositório.
 
-### 2. Preparar ambiente
+### 2. Criar o ambiente
 
-```bash
-chmod +x setup_env.sh run_menu.sh run_checker.sh
-./setup_env.sh
-```
-
-Esse script:
-
-- cria um `.venv`
-- instala as dependências Python
-- instala dependências do frontend
-- executa `npm run build`
-- cria `.env` se não existir
-
-### 3. Iniciar a aplicação
+Na raiz do projeto:
 
 ```bash
-./run_menu.sh
+npm run setup
 ```
 
-A aplicação será iniciada em:
+O setup:
+
+- valida Node.js e Python;
+- cria ou recria `.venv` quando necessário;
+- instala `requirements.txt`;
+- cria `.env` a partir de `exeplo.env` quando não existe;
+- instala dependências com `npm ci` quando existe lockfile;
+- executa o build React;
+- valida `frontend/react/dist/index.html`.
+
+O setup é idempotente e usa caminhos relativos. Não use caminhos absolutos da máquina.
+
+### 3. Validar a instalação
+
+```bash
+npm run verify
+```
+
+### 4. Iniciar o ambiente local
+
+```bash
+npm run dev
+```
+
+Os serviços iniciam em:
 
 ```text
-http://127.0.0.1:5000
+http://localhost:5173  # frontend Vite
+http://localhost:5000  # Flask/API
+http://localhost:8080  # servidor público de playlists/EPG
 ```
 
-## Instalação no Windows
-
-### 1. Instalar dependências
-
-- Python 3.11+
-- Node.js LTS
-- npm
-
-### 2. Executar setup
-
-```bat
-setup_env.bat
-```
-
-### 3. Iniciar a aplicação
-
-```bat
-run_menu.bat
-```
-
-Isso abre o navegador para `http://127.0.0.1:5000` e inicia o Flask.
+Os wrappers `setup_env.*` e `run_menu.*` continuam disponíveis por compatibilidade, mas não devem ser usados como fluxo oficial.
 
 ## Instalação via Docker
 
@@ -144,14 +138,23 @@ pip install -r requirements.txt
 
 ```bash
 cd frontend/react
-npm install
+npm ci
 npm run build
 ```
+
+Use `npm install` somente quando o projeto não possui `package-lock.json`.
 
 ### Rodar a aplicação
 
 ```bash
-python -m src.app
+npm run dev
+```
+
+Para produção:
+
+```bash
+npm run build
+npm run start
 ```
 
 ## Verificações pós-instalação
@@ -170,9 +173,9 @@ Confirme que os itens abaixo existam:
 Credencial inicial:
 
 - usuário: `admin`
-- senha: a senha aleatória exibida/criada pelo `npm run setup` em `ADMIN_INITIAL_PASSWORD` no `.env`
+- senha: a senha aleatória criada pelo setup e armazenada em `ADMIN_INITIAL_PASSWORD` no `.env`.
 
-Se a base ainda estiver vazia, o sistema cria esse usuário automaticamente na primeira execução.
+Se a base ainda estiver vazia, o sistema cria esse usuário automaticamente na primeira execução. A senha deve ser alterada no primeiro login.
 
 ## Como atualizar dependências
 

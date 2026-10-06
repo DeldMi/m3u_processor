@@ -38,27 +38,24 @@ Instalar Node.js LTS e reiniciar terminal.
 
 Verifique:
 
-- se o Flask está em execução
-- se a porta 5000 não está ocupada
-- se o build do React existe em `frontend/react/dist`
+- se o Flask está em execução;
+- se as portas 5000/5173 não estão ocupadas;
+- se o build do React existe em `frontend/react/dist`.
 
-Comando para iniciar:
-
-```bash
-python -m src.app
-```
-
-Se quiser reiniciar em ambiente local:
+Comando oficial para iniciar:
 
 ```bash
-./run_menu.sh
+npm run dev
 ```
 
-ou
+Para produção:
 
-```bat
-run_menu.bat
+```bash
+npm run build
+npm run start
 ```
+
+Não use `python -m src.app` como fluxo oficial; o comando não inicia o Vite nem o servidor público.
 
 ### 4. Erro de acesso: login falha
 
@@ -71,7 +68,7 @@ Verifique:
 Credencial inicial:
 
 - usuário: `admin`
-- senha: a senha aleatória exibida/criada pelo `npm run setup` em `ADMIN_INITIAL_PASSWORD` no `.env`
+- senha: a senha aleatória criada pelo setup e armazenada em `ADMIN_INITIAL_PASSWORD` no `.env`
 
 Se perdeu a senha ou o usuário foi removido, veja o guia de recuperação.
 
@@ -80,16 +77,18 @@ Se perdeu a senha ou o usuário foi removido, veja o guia de recuperação.
 Solução:
 
 ```bash
-cd frontend/react
-npm install
+npm run setup
+npm run verify
+npm run dev
+```
+
+Se o build global foi alterado, execute também:
+
+```bash
 npm run build
 ```
 
-Depois reinicie o backend:
-
-```bash
-python -m src.app
-```
+Depois reinicie os serviços com `npm run dev` ou `npm run start`.
 
 ### 6. Port 5000 já está em uso
 
@@ -127,11 +126,7 @@ Verifique:
 
 ### 9. EPG/XML não aparece junto com M3U
 
-Possíveis causas:
-
-- `EPG_URLS` vazia ou inválida
-- falha de rede ao baixar o XML
-- problemas de permissão na pasta `output/`
+A implementação atual possui o downloader e a geração de XMLTV básico, mas não possui uma página administrativa completa nem uma associação persistida de programas por canal. Antes de tratar o EPG como funcional, confirme o conteúdo gerado em `output/` e a configuração `EPG_URLS`.
 
 ### 10. O agendamento não dispara
 
@@ -173,10 +168,7 @@ em caches internos do GitHub; para dados secretos, solicite a remoção ao supor
 
 ### 12. Erro `database or disk is full`
 
-Esse erro significa que a unidade do projeto não consegue gravar no SQLite ou criar
-arquivos temporários. Verifique o espaço livre, remova arquivos locais grandes ou
-antigos e reinicie o backend. O sistema bloqueia novas sincronizações quando há
-menos de 512 MB livres e evita iniciar várias sincronizações ao mesmo tempo.
+Esse erro significa que a unidade do projeto não consegue gravar no SQLite ou criar arquivos temporários. Verifique o espaço livre, remova arquivos locais grandes ou antigos e reinicie o backend. O sistema bloqueia novas sincronizações quando há menos de 512 MB livres e evita iniciar várias sincronizações ao mesmo tempo.
 
 ## Log útil
 
@@ -221,7 +213,7 @@ Quando necessário, pode resetar o ambiente local manualmente:
 
 ```bash
 rm -rf .venv frontend/react/node_modules frontend/react/dist data/app.db
-./setup_env.sh
+npm run setup
 ```
 
 No Windows:
@@ -231,7 +223,7 @@ rmdir /s /q .venv
 rmdir /s /q frontend\react\node_modules
 rmdir /s /q frontend\react\dist
 del data\app.db
-setup_env.bat
+npm run setup
 ```
 
 > Atenção: isso apaga o banco SQLite e os dados locais. Use com cautela.

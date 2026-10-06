@@ -49,26 +49,28 @@ O fluxo geral é:
 
 ## Acesso inicial
 
-Credencial inicial:
+O banco novo cria o usuário `admin`. A senha é gerada aleatoriamente pelo setup e escrita em `ADMIN_INITIAL_PASSWORD` no `.env`; ela deve ser alterada imediatamente após o primeiro acesso.
 
-- usuário: `admin`
-- senha: a senha aleatória exibida/criada pelo `npm run setup` em `ADMIN_INITIAL_PASSWORD` no `.env`
+Os scripts antigos `setup_env.*` e `run_menu.*` permanecem como wrappers de compatibilidade, mas o fluxo oficial é o que está definido no `package.json`.
 
 ## Instalação rápida
 
-### Linux
+### Linux / macOS / Windows
 
 ```bash
-chmod +x *.sh
-./setup_env.sh
-./run_menu.sh
+npm run setup
+npm run verify
+npm run dev
 ```
 
-### Windows
+O comando `npm run setup` é idempotente, quer usa o Python local do projeto e instala as dependências do frontend. Em uma instalação limpa, execute `npm run setup` antes de qualquer verificação.
 
-```bat
-setup_env.bat
-run_menu.bat
+### Produção
+
+```bash
+npm run setup
+npm run build
+npm run start
 ```
 
 ### Docker
@@ -183,4 +185,4 @@ Depois de instalar o ambiente, use:
 npm run verify
 ```
 
-O comando valida Python, testes do backend, TypeScript/Vite e a estrutura mínima do projeto.
+O comando valida sintaxe Python, testes do backend, TypeScript/Vite e arquivos estruturais obrigatórios. A suíte atual contém testes automatizados de parser, autenticação, monitoramento e regressões de segurança; não substitui testes end-to-end de navegador.

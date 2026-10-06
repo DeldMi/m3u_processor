@@ -2,11 +2,13 @@
 
 ## Arquivo `.env`
 
-O projeto usa o arquivo `.env` para guardar configurações principais. Se não existir, use o exemplo `exeplo.env` como base.
+O arquivo `.env` contém variáveis de ambiente e segredos. O `ConfigManager` gera `SECRET_KEY` automaticamente quando ausente. O setup cria o arquivo a partir de `exeplo.env` quando necessário.
 
 ```bash
 cp exeplo.env .env
 ```
+
+Configurações operacionais existentes no código include `MAX_CHANNELS_PER_FILE`, `CONCURRENCY_LIMIT`, `REQUEST_TIMEOUT`, `USER_AGENT`, `REMOTE_M3U_URLS`, `EPG_URLS`, `BASE_URL`, `PUBLIC_BASE_URL`, agendamento, monitoramento, segurança e publicação. O projeto possui uma UI de configuração, mas não deve ser considerado uma base de dados funcional para todos os valores.
 
 ### Configurações mais importantes
 
@@ -176,7 +178,7 @@ Esse valor é importante porque os links gerados nos M3U e XMLTV apontam para es
 
 ### `API_TOKEN`
 
-Token usado em autenticação por Bearer para API.
+Token usado em autenticação por Bearer para API. Não deve ser exposto na interface. A API aceita o token somente em operações que já possuem uma permissão de recurso/action.
 
 Exemplo:
 
@@ -198,7 +200,7 @@ No painel web, vá em:
 - alterar campos
 - salvar
 
-As alterações são gravadas no arquivo `.env` e aplicadas automaticamente ao sistema.
+As alterações são gravadas no `.env` via `ConfigManager` e aplicadas ao sistema. A API rejeita chaves desconhecidas e protege `SECRET_KEY`, `API_TOKEN` e `ADMIN_INITIAL_PASSWORD`.
 
 ## Como configurar fontes de origem
 

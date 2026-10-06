@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Boxes, ChevronLeft, ChevronRight, ListVideo, Play, Plus, RefreshCw, Save, SlidersHorizontal, Trash2, Upload, Wifi, X } from "lucide-react";
 import { api, send } from "../../services/api";
-import type { Channel, ChannelColumn, ChannelOptions, Manifest, User } from "../../types";
+import type { Channel, ChannelColumn, ChannelOptions, EpgSource, Manifest, User } from "../../types";
 import { Header, PanelTitle, Empty, Modal, canEdit, hasPermission } from "../../components/Common";
 
 
@@ -70,8 +70,27 @@ export function Channels({ user }: { user: User }) {
         setQuery({ ...query, [key]: value });
     const sortBy = (field: string) => setQuery({ ...query, sort: field, direction: query.sort === field && query.direction === "asc" ? "desc" : "asc" });
     const toggleColumn = (column: ChannelColumn) => setColumns(columns.includes(column) ? columns.filter((item) => item !== column) : [...columns, column]);
-    const columnLabels: Record<ChannelColumn, string> = { status: "Status", id: "Ch. No.", logo: "Logo", name: "Channel Name", country: "País", state: "Estado", city: "Cidade", playlist: "Playlist", group_title: "Group Title", xmltv_file: "XMLTV File", tvg_id: "XMLTV ID", latency_ms: "Latência", auto_remove: "Remover OFF", actions: "Ações" };
+    const columnLabels: Record<ChannelColumn, string> = { status: "Status", id: "Ch. No.", logo: "Logo", name: "Channel Name", country: "País", state: "Estado", city: "Cidade", playlist: "Playlist", group_title: "Group Title", epg_source: "Guia EPG", xmltv_file: "XMLTV File", tvg_id: "XMLTV ID", latency_ms: "Latência", auto_remove: "Remover OFF", actions: "Ações" };
     const header = (column: ChannelColumn) => <button className="table-sort" onClick={() => sortBy(column)}>{columnLabels[column]} {query.sort === column ? (query.direction === "asc" ? "↑" : "↓") : "↕"}</button>;
+    const renderCell = (column: ChannelColumn, channel: Channel) => {
+        switch (column) {
+            case "status": return <button aria-label={`Status ${channel.name}: ${channel.status}`} className={`status-dot ${channel.status}`} disabled={!canEdit(user)} onClick={() => patch(`/api/v1/channels/${channel.id}/status`, { status: channel.status === "online" ? "offline" : "online" })} />;
+            case "id": return channel.channel_number ?? channel.id;
+            case "logo": return <span className="channel-logo">{channel.logo ? <img src={channel.logo} onError={event => { event.currentTarget.style.display = "none"; }} /> : <Wifi size={14} />}</span>;
+            case "name": return <b>{channel.name}</b>;
+            case "country": return channel.country || "-";
+            case "state": return channel.state || "-";
+            case "city": return channel.city || "-";
+            case "playlist": return channel.playlist || "-";
+            case "group_title": return channel.group_title || "-";
+            case "epg_source": return channel.epg_source_name || "-";
+            case "xmltv_file": return channel.xmltv_file || "-";
+            case "tvg_id": return (channel.epg_source_id ? channel.epg_channel_id : "") || channel.tvg_id || "-";
+            case "latency_ms": return `${channel.latency_ms || 0} ms`;
+            case "auto_remove": return <input aria-label={`Remover ${channel.name} se offline`} type="checkbox" checked={Boolean(channel.auto_remove_if_offline)} disabled={!canEdit(user)} onChange={event => patch(`/api/v1/channels/${channel.id}/autoremove`, { auto_remove_if_offline: event.target.checked ? 1 : 0 })} />;
+            case "actions": return <>{canEdit(user) && <button className="text-button" onClick={() => setEditing(channel)}>Editar</button>}{hasPermission(user, "channels", "delete") && <button className="icon-button" title="Excluir canal" onClick={() => removeChannel(channel)}><Trash2 size={14} /></button>}<button className="icon-button" title="Assistir" onClick={() => dispatchEvent(new CustomEvent("play-channel", { detail: channel }))}><Play size={14} /></button></>;
+        }
+    };
     return (
         <>
             <Header
@@ -191,20 +210,7 @@ export function Channels({ user }: { user: User }) {
                             {visible.map((c) => (
                                 <tr key={c.id}>
                                     <td><input type="checkbox" checked={selected.includes(c.id)} onChange={(e) => setSelected(e.target.checked ? [...selected, c.id] : selected.filter((id) => id !== c.id))} /></td>
-                                    {columns.includes("status") && <td><button className={`status-dot ${c.status}`} disabled={!canEdit(user)} onClick={() => patch(`/api/v1/channels/${c.id}/status`, { status: c.status === "online" ? "offline" : "online" })} /></td>}
-                                    {columns.includes("id") && <td>{c.channel_number ?? c.id}</td>}
-                                    {columns.includes("logo") && <td><span className="channel-logo">{c.logo ? <img src={c.logo} onError={(e) => { e.currentTarget.style.display = "none"; }} /> : <Wifi size={14} />}</span></td>}
-                                    {columns.includes("name") && <td className="channel-name"><b>{c.name}</b></td>}
-                                    {columns.includes("country") && <td>{c.country || "-"}</td>}
-                                    {columns.includes("state") && <td>{c.state || "-"}</td>}
-                                    {columns.includes("city") && <td>{c.city || "-"}</td>}
-                                    {columns.includes("playlist") && <td>{c.playlist || "-"}</td>}
-                                    {columns.includes("group_title") && <td>{c.group_title || "-"}</td>}
-                                    {columns.includes("xmltv_file") && <td>{c.xmltv_file || "-"}</td>}
-                                    {columns.includes("tvg_id") && <td>{c.tvg_id || "-"}</td>}
-                                    {columns.includes("latency_ms") && <td>{c.latency_ms || 0} ms</td>}
-                                    {columns.includes("auto_remove") && <td><input type="checkbox" checked={Boolean(c.auto_remove_if_offline)} disabled={!canEdit(user)} onChange={(e) => patch(`/api/v1/channels/${c.id}/autoremove`, { auto_remove_if_offline: e.target.checked ? 1 : 0 })} /></td>}
-                                    {columns.includes("actions") && <td>{canEdit(user) && <button className="text-button" onClick={() => setEditing(c)}>Editar</button>}{hasPermission(user, "channels", "delete") && <button className="icon-button" title="Excluir canal" onClick={() => removeChannel(c)}><Trash2 size={14} /></button>}<button className="icon-button" title="Assistir" onClick={() => dispatchEvent(new CustomEvent("play-channel", { detail: c }))}><Play size={14} /></button></td>}
+                                    {columns.map(column => <td key={column} className={column === "name" ? "channel-name" : undefined}>{renderCell(column, c)}</td>)}
                                 </tr>
                             ))}
                         </tbody>
@@ -215,6 +221,7 @@ export function Channels({ user }: { user: User }) {
             {editing && (
                 <ChannelEditor
                     channel={editing}
+                    user={user}
                     close={() => setEditing(null)}
                     saved={() => {
                         setEditing(null);
@@ -231,26 +238,41 @@ export function Channels({ user }: { user: User }) {
 
 export function ChannelEditor({
     channel,
+    user,
     close,
     saved,
 }: {
     channel: Channel;
+    user: User;
     close: () => void;
     saved: () => void;
 }) {
     const [form, setForm] = useState(channel);
+    const [epgSources, setEpgSources] = useState<EpgSource[]>([]);
     const [uploading, setUploading] = useState(false);
+    useEffect(() => { if (hasPermission(user, "epg", "view")) api<EpgSource[]>("/api/v1/epg/sources").then(setEpgSources).catch(() => setEpgSources([])); }, [user]);
     const set = (key: keyof Channel, value: string | number) =>
         setForm({ ...form, [key]: value });
-    const submit = (e: React.FormEvent) => {
+    const submit = async (e: React.FormEvent) => {
         e.preventDefault();
-        api(channel.id ? `/api/v1/channels/${channel.id}` : "/api/v1/channels", {
-            method: channel.id ? "PATCH" : "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(form),
-        })
-            .then(saved)
-            .catch(() => alert(channel.id ? "Não foi possível salvar o canal." : "Não foi possível criar o canal."));
+        const { epg_source_id, epg_channel_id, ...channelForm } = form;
+        try {
+            const result = await api<Channel>(channel.id ? `/api/v1/channels/${channel.id}` : "/api/v1/channels", {
+                method: channel.id ? "PATCH" : "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(channelForm),
+            });
+            if (hasPermission(user, "epg", "edit")) {
+                await api(`/api/v1/epg/channels/${channel.id || result.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ epg_source_id: epg_source_id || "", epg_channel_id: epg_channel_id || "" }),
+                });
+            }
+            saved();
+        } catch {
+            alert(channel.id ? "Não foi possível salvar o canal ou sua associação EPG." : "Não foi possível criar o canal ou sua associação EPG.");
+        }
     };
     const uploadLogo = (file: File) => {
         const body = new FormData();
@@ -298,6 +320,8 @@ export function ChannelEditor({
                     </label>
                     <label>Logo por URL<input value={String(form.logo || "")} onChange={(e) => set("logo", e.target.value)} placeholder="https://..." /></label>
                     <label>Enviar logo do computador<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={uploading} onChange={(e) => e.target.files?.[0] && uploadLogo(e.target.files[0])} /></label>
+                    {hasPermission(user, "epg", "view") && <><label>Guia EPG / XMLTV<select disabled={!hasPermission(user, "epg", "edit")} value={form.epg_source_id || ""} onChange={(e) => setForm({ ...form, epg_source_id: e.target.value ? Number(e.target.value) : null, epg_channel_id: e.target.value ? form.epg_channel_id || form.tvg_id || "" : "" })}><option value="">Sem guia associada</option>{epgSources.map(source => <option key={source.id} value={source.id}>{source.name}</option>)}</select></label>
+                        <label>ID do canal na guia<input value={form.epg_channel_id || ""} disabled={!hasPermission(user, "epg", "edit") || !form.epg_source_id} onChange={(e) => set("epg_channel_id", e.target.value)} placeholder={form.tvg_id || "tvg-id"} /></label></>}
                 </div>
                 <label>
                     Categoria

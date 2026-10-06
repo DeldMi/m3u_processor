@@ -81,3 +81,4 @@ node_modules
 */node_modules
 */*/node_modules
 .wrangler
+.github2

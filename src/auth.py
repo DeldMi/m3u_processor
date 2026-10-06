@@ -21,6 +21,7 @@ ROUTE_PERMISSIONS = {
     "api_update_user": ("users", "edit"), "api_update_profile": ("users", "edit"),
     "api_admin_restart": ("system", "admin"), "api_admin_shutdown": ("system", "admin"),
     "view_users": ("users", "view"), "view_settings": ("settings", "view"),
+    "view_epg_guides": ("epg", "view"),
     "view_channels": ("channels", "view"), "view_playlists": ("playlists", "view"),
     "view_dashboard": ("dashboard", "view"),
 }

@@ -535,6 +535,8 @@ Suportar:
 * URL;
 * logo;
 * status;
+* fonte EPG associada (`epg_source_id`);
+* identificador XMLTV correspondente (`epg_channel_id`);
 * demais metadados IPTV compatíveis.
 
 ## 7.2 CH. NO.
@@ -562,6 +564,7 @@ Deve possuir:
 
 * ordenação por cabeçalho;
 * seleção persistente de colunas;
+* coluna opcional com a fonte EPG associada;
 * paginação quando necessário;
 * virtualização quando o volume justificar.
 
@@ -715,6 +718,14 @@ Deve ser possível:
 * baixar;
 * excluir;
 * administrar permissões.
+
+## 9.6 Estado implementado
+
+A rota `/epg-guides` possui abas para fontes XMLTV, canais e programação. Fontes podem ser criadas por URL ou upload `.xml`/`.gz`, validadas, sincronizadas, substituídas, editadas e removidas. Ao alterar uma URL, o novo conteúdo deve ser baixado e validado antes de substituir o arquivo atual.
+
+A aba de canais oferece busca, filtros por país/estado/cidade/categoria/status, seleção de colunas persistida, ordenação, paginação, associação individual/em lote de fontes XMLTV, criação/edição e exclusão explícita conforme o RBAC. A programação individual por canal suporta título, descrição, categoria, início/fim, recorrência única/diária/semanal, dias, temporada, episódio, classificação e imagem. A geração XMLTV expande recorrências na janela dos próximos oito dias e publica somente as fontes/programações vinculadas aos canais da playlist.
+
+Uploads e cópias sincronizadas ficam em `data/epg_sources/`, fora da área pública. Programas ficam na tabela SQLite `epg_programmes`. APIs e operações devem continuar protegidas pelo recurso `epg` e suas ações RBAC; operações de cadastro de canal também respeitam `channels:create/edit/delete`. O perfil editor inclui `epg:execute`; exclusão continua exigindo `epg:delete`.
 
 ---
 
@@ -2273,7 +2284,7 @@ A implementação está parcialmente migrada para a estrutura semântica:
 ## 47.4 Pendências verificadas
 
 - Bundle principal de 829,64 kB: aviso de tamanho, sem falha funcional.
-- EPG não possui uma página administrativa completa no diretório de features atual.
+- O domínio EPG administra fontes, canais vinculados e programação; não há ainda editor visual por grade/calendário nem testes automatizados de navegador.
 - Canais possuem uma página principal, mas o domínio de canais ainda mantém endpoints legados e integração parcial.
 - O build e a suíte não cobrem navegador, upload, sessão, sincronização completa, publicação, health check e operações em lote.
 - O workflow de CI está excluído no estado atual do repositório e não faz parte desta auditoria.
@@ -2282,3 +2293,62 @@ A implementação está parcialmente migrada para a estrutura semântica:
 ## 47.5 Critério de conclusão
 
 O projeto está funcional para instalação, compilação, testes, execução local e validação básica de assets. Não é possível afirmar que todos os recursos complexos estão completos apenas por causa dos testes e build aprovados. Cada nova alteração deve preservar o estado validado acima e atualizar esta seção quando uma funcionalidade ser concluída ou uma limitação for removida.
+
+---
+
+# 48. Administração de EPG e restauração do editor
+
+Data da atualização:
+
+```text
+2026-10-06
+```
+
+Estado implementado:
+
+- O item **Guias EPG** está disponível em `/epg-guides`, condicionado a `epg:view`.
+- Fontes XMLTV podem ser adicionadas por URL ou upload `.xml`/`.gz`, validadas, sincronizadas, renomeadas e removidas conforme as permissões `epg:create`, `epg:execute`, `epg:edit` e `epg:delete`.
+- Canais podem selecionar uma fonte EPG e informar o ID XMLTV correspondente; remover uma fonte limpa seus vínculos sem apagar os canais.
+- A geração de playlists recorta XMLTV das fontes selecionadas e usa o ID EPG associado no atributo `tvg-id`.
+- A tabela de Canais voltou ao editor completo. Cabeçalhos e valores de linha são renderizados na ordem configurada; filtros incluem país, estado, cidade, categoria e status.
+- Criação e exclusão de canais usam rotas persistentes protegidas; a rota duplicada que respondia `405` foi removida.
+- Sincronização, edição de fontes e uploads respeitam as permissões do backend; caminhos locais das fontes não são incluídos nas respostas da API.
+- Servidores Flask, Vite e público que estavam ouvindo nas portas 5000, 5173 e 8080 foram encerrados nesta sessão.
+
+Verificação desta atualização:
+
+```text
+26 testes Python passaram, incluindo 7 testes EPG.
+Verificador oficial passou: sintaxe Python, testes, TypeScript e build React.
+Build produziu alerta de bundle JavaScript acima de 500 kB, sem falha.
+Servidores Flask, Vite e público foram encerrados; nenhuma validação de navegador foi executada.
+```
+
+---
+
+# 49. Edição de programação XMLTV
+
+Data da atualização:
+
+```text
+2026-10-06
+```
+
+Estado implementado:
+
+- `/epg-guides` possui abas Guias, Canais e Programação.
+- Fontes XMLTV aceitam criação por URL/arquivo, pesquisa, sincronização, edição/substituição validada e exclusão.
+- Administração de canais EPG suporta busca, filtros de país/estado/cidade/categoria/status, ordenação, seleção/configuração persistente de colunas, paginação, associação em lote, criação, edição de nome, CH. NO., TVG ID, URL, logo, grupo, local/categoria e exclusão individual/em lote com confirmação.
+- Programas por canal suportam criação, edição, exclusão, título, descrição, categoria, início/fim, recorrência única/diária/semanal, dias, temporada, episódio, classificação e imagem.
+- Programação fica em `epg_programmes`; recorrências são emitidas no XMLTV pelos próximos oito dias e os IDs associados são publicados como identificadores de canal.
+- Edição de uma URL baixa e valida o novo conteúdo antes de substituir o arquivo antigo.
+- APIs de programação usam RBAC `epg`; criação/edição/exclusão de canais mantém as ações `channels` separadas. Canais criados via API só aceitam vínculo XMLTV quando o usuário possui `epg:edit`.
+
+Verificação desta atualização:
+
+```text
+27 testes Python passaram, incluindo regressão para envio multipart de fontes XMLTV por URL.
+Verificador oficial passou: sintaxe Python, testes, TypeScript e build React.
+Flask test_client retornou 200 para /epg-guides, /api/v1/epg/sources, /api/v1/epg/channels e /api/v1/epg/programmes com sessão administrativa.
+O Vite local foi iniciado em http://localhost:5173; não foi executado teste visual de navegador.
+```

@@ -30,7 +30,7 @@ class EPGManager:
             # Cria um XMLTV basico caso nao haja guia mestre disponivel
             root = ET.Element("tv")
             for ch in chunk_channels:
-                tvg_id = ch.get("tvg_id") or ch["name"]
+                tvg_id = (ch.get("epg_channel_id") if ch.get("epg_source_id") else None) or ch.get("tvg_id") or ch["name"]
                 c_elem = ET.SubElement(root, "channel", id=tvg_id)
                 dn = ET.SubElement(c_elem, "display-name")
                 dn.text = ch["name"]
@@ -45,6 +45,8 @@ class EPGManager:
             # Mapeamento de IDs validos presentes nesta particao de 400 canais
             target_ids: Set[str] = set()
             for ch in chunk_channels:
+                if ch.get("epg_channel_id"):
+                    target_ids.add(ch["epg_channel_id"].strip().lower())
                 if ch.get("tvg_id"):
                     target_ids.add(ch["tvg_id"].lower())
                 target_ids.add(ch["name"].strip().lower())

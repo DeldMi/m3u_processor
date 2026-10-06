@@ -8,7 +8,7 @@ O arquivo `.env` contém variáveis de ambiente e segredos. O `ConfigManager` ge
 cp exeplo.env .env
 ```
 
-Configurações operacionais existentes no código include `MAX_CHANNELS_PER_FILE`, `CONCURRENCY_LIMIT`, `REQUEST_TIMEOUT`, `USER_AGENT`, `REMOTE_M3U_URLS`, `EPG_URLS`, `BASE_URL`, `PUBLIC_BASE_URL`, agendamento, monitoramento, segurança e publicação. O projeto possui uma UI de configuração, mas não deve ser considerado uma base de dados funcional para todos os valores.
+Configurações operacionais existentes no código incluem `MAX_CHANNELS_PER_FILE`, `CONCURRENCY_LIMIT`, `REQUEST_TIMEOUT`, `USER_AGENT`, `REMOTE_M3U_URLS`, `EPG_URLS`, `BASE_URL`, `PUBLIC_BASE_URL`, agendamento, monitoramento, segurança e publicação. O cadastro operacional de fontes XMLTV é feito na página **Guias EPG** e armazenado no SQLite; `EPG_URLS` permanece como configuração legada e não substitui esse cadastro. A UI de Configurações não torna automaticamente funcionais valores que não são consumidos pelo backend.
 
 ### Configurações mais importantes
 

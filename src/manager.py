@@ -12,6 +12,7 @@ from src.parser import M3UParser
 from src.classifier import StreamClassifier
 from src.checker import test_stream, create_ssl_context
 from src.epg import EPGManager
+from src.domains.epg.service import compose_xmltv
 from src.config import ConfigManager
 from src.db import Database
 
@@ -205,19 +206,25 @@ class PlaylistManager:
         safe_name = re.sub(r"[^a-zA-Z0-9_-]+", "_", playlist_name).strip("_-")
         file_prefix = f"_{safe_name}" if safe_name else ""
         chunks = [selected[i:i + max_limit] for i in range(0, len(selected), max_limit)]
+        epg_sources = {int(source["id"]): source["file_path"] for source in self.db.list_epg_sources()}
 
         for idx, chunk in enumerate(chunks, start=1):
             m3u_name = f"playlist{file_prefix}_parte_{idx:02d}.m3u"
             xml_name = f"epg{file_prefix}_parte_{idx:02d}.xml"
             m3u_path = os.path.join(self.output_dir, m3u_name)
             xml_path = os.path.join(self.output_dir, xml_name)
-            EPGManager.slice_epg_for_chunk("", chunk, xml_path)
+            guide_xml = compose_xmltv(chunk, epg_sources, self.db.list_epg_programmes())
+            EPGManager.slice_epg_for_chunk(guide_xml, chunk, xml_path)
             temp_m3u = m3u_path + ".tmp"
             try:
                 with open(temp_m3u, "w", encoding="utf-8") as f:
                     f.write(f'#EXTM3U url-tvg="{base_url}/epg/{xml_name}"\n')
                     for ch in chunk:
-                        meta = ch.get("metadata") or f'#EXTINF:-1 tvg-id="{ch.get("tvg_id", ch.get("name", ""))}",{ch.get("name", "Canal Desconhecido")}'
+                        configured_epg_id = ch.get("epg_channel_id") if ch.get("epg_source_id") else None
+                        meta = ch.get("metadata") or f'#EXTINF:-1 tvg-id="{configured_epg_id or ch.get("tvg_id", ch.get("name", ""))}",{ch.get("name", "Canal Desconhecido")}'
+                        epg_channel_id = str(configured_epg_id or "").strip()
+                        if epg_channel_id and "tvg-id" in meta.lower():
+                            meta = re.sub(r'(tvg-id\s*=\s*["\']).*?(["\'])', lambda match: f"{match.group(1)}{epg_channel_id}{match.group(2)}", meta, count=1, flags=re.IGNORECASE)
                         channel_number = ch.get("channel_number")
                         if channel_number is not None:
                             meta = re.sub(r'\s+tvg-chno="[^"]*"', "", meta, flags=re.IGNORECASE)

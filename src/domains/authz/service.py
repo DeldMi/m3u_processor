@@ -8,7 +8,7 @@ ACTIONS = ("view", "create", "edit", "delete", "execute", "admin")
 RESOURCES = ("dashboard", "channels", "playlists", "epg", "sync", "health", "settings", "users", "logs", "maintenance", "public_files", "system")
 ROLE_PERMISSIONS = {
     "viewer": {"dashboard":{"view"},"channels":{"view"},"playlists":{"view"},"epg":{"view"},"health":{"view"}},
-    "editor": {"dashboard":{"view"},"channels":{"view","create","edit"},"playlists":{"view","create","edit"},"epg":{"view","create","edit"},"sync":{"view","execute"},"health":{"view"}},
+    "editor": {"dashboard":{"view"},"channels":{"view","create","edit"},"playlists":{"view","create","edit"},"epg":{"view","create","edit","execute"},"sync":{"view","execute"},"health":{"view"}},
     "admin": {resource:set(ACTIONS) for resource in RESOURCES},
 }
 PERMISSION_CATALOG = [

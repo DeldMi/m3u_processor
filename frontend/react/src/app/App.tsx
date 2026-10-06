@@ -8,6 +8,7 @@ import { Dashboard } from "../features/dashboard/DashboardPage";
 // Mantém a experiência completa do editor e as operações administrativas.
 import { Channels } from "../features/channels/ChannelsPage";
 import { Playlists } from "../features/playlists/PlaylistsPage";
+import { EpgGuidesPage } from "../features/epg/EpgGuidesPageV2";
 import { SettingsHubPage } from "../features/settings/SettingsHubPage";
 import { ResourceSettingsPage } from "../features/settings/ResourceSettingsPage";
 import { ThemeSettingsPage } from "../features/settings/ThemeSettingsPage";
@@ -18,6 +19,7 @@ const ROUTES = {
     "/": ["dashboard", "view"],
     "/channels": ["channels", "view"],
     "/playlists": ["playlists", "view"],
+    "/epg-guides": ["epg", "view"],
     "/settings": ["settings", "view"],
     "/settings/resources": ["settings", "view"],
     "/settings/themes": ["settings", "view"],
@@ -38,6 +40,7 @@ export function App() {
     let content: ReactNode = <Dashboard user={user} />;
     if (path === "/channels") content = <Channels user={user} />;
     if (path === "/playlists") content = <Playlists user={user} />;
+    if (path === "/epg-guides") content = <EpgGuidesPage user={user} />;
     if (path === "/settings") content = <SettingsHubPage />;
     if (path === "/settings/resources") content = <ResourceSettingsPage />;
     if (path === "/settings/themes") content = <ThemeSettingsPage user={user} />;

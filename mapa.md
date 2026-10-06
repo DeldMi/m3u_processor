@@ -54,6 +54,6 @@ m3u_processor/
 
 ## Limitações conhecidas
 
-- A página administrativa de EPG é parcial; a geração XMLTV existe, mas a associação de programas por canal ainda não é persistida completamente.
+- A página EPG oferece cadastro/sincronização de fontes, edição dos metadados dos canais e CRUD de programação por canal com recorrência; ainda não há visualização em grade/calendário nem testes de navegador.
 - O fluxo de canais V2 está ativo; os endpoints legados e os domínios ainda coexistem durante a migração.
 - O setup possui um bloqueio de ambiente Windows ao remover o binário do esbuild, embora o fluxo tenha sido validado até a instalação do frontend.

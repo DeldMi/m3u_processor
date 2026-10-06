@@ -17,6 +17,7 @@ Este projeto combina:
 - SQLite para dados
 - React + Vite + Tailwind + SCSS para interface web
 - processamento de listas M3U e XMLTV
+- administração de fontes XMLTV e associação de guias aos canais
 - validação de canais online/offline
 - geração de arquivos em blocos
 - autenticação por usuário e roles
@@ -63,7 +64,7 @@ npm run verify
 npm run dev
 ```
 
-O comando `npm run setup` é idempotente, quer usa o Python local do projeto e instala as dependências do frontend. Em uma instalação limpa, execute `npm run setup` antes de qualquer verificação.
+O comando `npm run setup` é idempotente, usa o Python do projeto e instala as dependências do frontend. Em uma instalação limpa, execute `npm run setup` antes de qualquer verificação.
 
 ### Produção
 
@@ -85,6 +86,8 @@ docker compose up -d --build
 Menu: http://127.0.0.1:5000
 Links M3U/EPG: http://127.0.0.1:8080
 ```
+
+No painel, **Guias EPG** administra fontes XMLTV, os metadados/vínculos dos canais e grades de programação por canal, incluindo horários e recorrência.
 
 ## Configuração principal
 

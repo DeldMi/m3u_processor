@@ -96,6 +96,9 @@ def register_monitoring_routes(app, manager, process_state, process_logs, notifi
     @require_permission("channels", "create")
     def create_channel():
         data=dict(request.get_json(silent=True) or {})
+        if not allowed("epg", "edit"):
+            data.pop("epg_source_id", None)
+            data.pop("epg_channel_id", None)
         channel_id=manager.db.create_channel(data)
         if channel_id is None:return jsonify({"error":"Canal inválido ou URL já cadastrada."}),400
         message=f"Canal '{data.get('name','')}' criado manualmente."

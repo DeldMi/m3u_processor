@@ -126,7 +126,7 @@ Verifique:
 
 ### 9. EPG/XML não aparece junto com M3U
 
-A implementação atual possui o downloader e a geração de XMLTV básico, mas não possui uma página administrativa completa nem uma associação persistida de programas por canal. Antes de tratar o EPG como funcional, confirme o conteúdo gerado em `output/` e a configuração `EPG_URLS`.
+A página **Guias EPG** (`/epg-guides`) permite importar `.xml`/`.gz`, cadastrar URL HTTP/HTTPS, sincronizar/substituir a fonte e associá-la a canais pelo ID XMLTV. Também permite criar/editar programação por canal com horário e recorrência. Confira a mensagem da tela e o último erro exibido na lista de guias. Os XMLTV publicados ficam em `output/`, enquanto as fontes privadas ficam em `data/epg_sources/`.
 
 ### 10. O agendamento não dispara
 

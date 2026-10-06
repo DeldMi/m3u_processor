@@ -31,6 +31,8 @@ Principais módulos:
 - `src/classifier.py` — organização por país/estado/cidade/categoria
 - `src/checker.py` — verificação de disponibilidade de canais
 - `src/epg.py` — geração de XMLTV/EPG por partição
+- `src/domains/epg/service.py` — validação, armazenamento, composição e download seguro de XMLTV
+- `src/domains/epg/routes.py` — APIs RBAC de fontes XMLTV e associações com canais
 
 ### 2. Frontend React
 
@@ -50,6 +52,7 @@ Estrutura:
 - `output/` — playlists geradas e arquivos XMLTV
 - `logs/` — relatórios JSON de auditoria
 - `data/` — banco SQLite e dados persistentes
+- `data/epg_sources/` — XMLTV importado/sincronizado, não público diretamente
 - `frontend/react/dist/` — build do React para produção
 
 ## Fluxo de funcionamento
@@ -95,8 +98,12 @@ Exemplo:
 Para cada partição:
 
 - um `.m3u` é gerado
-- um `.xml` EPG correspondente é gerado
+- um `.xml` EPG correspondente é gerado com os programas da fonte vinculada a cada canal
 - URLs públicas são montadas com `BASE_URL`
+
+As associações são persistidas em `channels.epg_source_id` e `channels.epg_channel_id`. A tabela `epg_sources` armazena nome, URL, caminho privado, contagem de canais, última sincronização e erro. Arquivos XMLTV são validados antes de serem armazenados; gzip é descompactado com limite de tamanho.
+
+A grade editável é armazenada em `epg_programmes`, associada ao canal, com título, descrição, categoria, início/fim, recorrência e dias da semana, temporada, episódio, classificação e imagem. As recorrências são expandidas no XMLTV gerado para os próximos oito dias.
 
 ## Estrutura de dados principal
 
@@ -134,6 +141,16 @@ Campos relevantes:
 - latency_ms
 - http_status
 - auto_remove_if_offline
+- epg_source_id
+- epg_channel_id
+
+### Tabela `epg_sources`
+
+Armazena fontes importadas por arquivo ou URL HTTP/HTTPS. A rota `/epg-guides` permite administrar fontes e associá-las a canais. O XMLTV de origem fica em `data/epg_sources/`; apenas os XMLTV gerados são publicados por `/epg/<arquivo>.xml`.
+
+### Tabela `epg_programmes`
+
+Armazena a grade manual por canal, com horários, recorrência única/diária/semanal e metadados compatíveis com XMLTV.
 
 ### Tabelas de processo
 
@@ -163,6 +180,7 @@ O sistema usa RBAC:
 - `/` — dashboard principal
 - `/channels` — catálogo de canais e editor
 - `/playlists` — listas publicadas
+- `/epg-guides` — fontes XMLTV, administração de canais vinculados e programação
 - `/settings` — configurações
 - `/users` — usuários
 - `/login` — login

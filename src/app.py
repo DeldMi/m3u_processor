@@ -23,6 +23,7 @@ from src.domains.sync.service import execute_pipeline as _execute_pipeline
 from src.domains.authz.service import create_user as authz_create_user, update_user as authz_update_user, list_public_users, has_permission
 from src.domains.monitoring.service import ResourceMonitor
 from src.domains.monitoring.routes import register_monitoring_routes
+from src.domains.epg.routes import register_epg_routes
 from src.manager import PlaylistManager
 
 BASE_DIR=os.path.abspath(os.path.join(os.path.dirname(__file__),"..")); app=Flask(__name__,template_folder=os.path.join(BASE_DIR,"frontend","templates"),static_folder=os.path.join(BASE_DIR,"frontend","static")); REACT_DIR=os.path.join(BASE_DIR,"frontend","react","dist"); app.secret_key=ConfigManager(BASE_DIR).get_all().get("SECRET_KEY")
@@ -52,6 +53,7 @@ def execute_pipeline(publication_mode=None):
 def setup_scheduler():configure_scheduler(scheduler,manager,execute_pipeline,execute_health_check)
 if not PUBLIC_ONLY:setup_scheduler()
 register_monitoring_routes(app,manager,PROCESS_STATE,PROCESS_LOGS,NOTIFICATIONS,RESOURCE_MONITOR,add_notification=add_notification)
+register_epg_routes(app,manager)
 
 @app.before_request
 def restrict_public_server():
@@ -88,6 +90,9 @@ def view_playlists():return serve_react_app() or render_template("playlists.html
 @app.route("/channels")
 @require_role("viewer")
 def view_channels():return serve_react_app() or render_template("channels.html")
+@app.route("/epg-guides")
+@require_role("viewer")
+def view_epg_guides():return serve_react_app() or render_template("channels.html")
 @app.route("/users")
 @require_role("viewer")
 def view_users():return serve_react_app() or render_template("users.html",users=list_public_users(manager.db))

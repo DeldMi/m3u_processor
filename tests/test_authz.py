@@ -29,6 +29,7 @@ class AuthorizationTests(unittest.TestCase):
     def test_editor_gets_operational_permissions_without_user_admin(self):
         self.assertTrue(has_permission(self.db, 1, "editor", "channels", "edit"))
         self.assertTrue(has_permission(self.db, 1, "editor", "sync", "execute"))
+        self.assertTrue(has_permission(self.db, 1, "editor", "epg", "execute"))
         self.assertFalse(has_permission(self.db, 1, "editor", "users", "view"))
         self.assertFalse(has_permission(self.db, 1, "editor", "settings", "admin"))
 
@@ -62,6 +63,7 @@ class AuthorizationTests(unittest.TestCase):
     def test_critical_channel_routes_use_granular_actions(self):
         self.assertEqual(_route_permission("create_channel"), ("channels", "create"))
         self.assertEqual(_route_permission("delete_channel"), ("channels", "delete"))
+        self.assertEqual(_route_permission("view_epg_guides"), ("epg", "view"))
         self.assertEqual(_route_permission("api_update_channel"), ("channels", "edit"))
         self.assertEqual(_route_permission("api_generate_custom_playlist"), ("playlists", "create"))
 

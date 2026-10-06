@@ -1949,7 +1949,13 @@ As seguintes correções fazem parte do contrato atual do projeto:
 * navegação `/settings/*` preservada;
 * temas personalizados preservados;
 * temas do sistema tratados como modelos;
-* compatibilidade de build React preservada.
+* compatibilidade de build React preservada;
+* base do Vite de desenvolvimento corrigida para `/`;
+* build local continua servido em `/app-assets/`;
+* servidor público mantém `/playlist/...` e `/epg/...`;
+* assets locais retornam `text/javascript` com o build Flask;
+* rotas SPA de desenvolvimento respondem diretamente;
+* aplicação local inicia backend, servidor público e Vite com o comando oficial.
 
 ---
 
@@ -2102,20 +2108,33 @@ Estado conhecido:
 * auditoria em evolução;
 * instalação cross-platform em evolução.
 
-Problemas locais conhecidos:
+Problemas locais conhecidos e status após auditoria:
 
 ```text
 localhost:5000
-/assets/index-*.js
-→ retornando HTML em vez de JavaScript
+/app-assets/assets/index-*.js
+→ resolvido: o build retorna JavaScript com MIME text/javascript
 ```
 
 ```text
 localhost:5173
 → base /app-assets/ sendo aplicada indevidamente ao desenvolvimento
+→ resolvido: a base é / no modo de desenvolvimento e /app-assets/ somente no build local
 ```
 
-Esses problemas devem ser tratados como prioridade P0 antes de considerar o ambiente local funcional.
+```text
+localhost:5173
+→ navegação direta e reload em /channels e /settings/*
+→ resolvido: Vite responde diretamente às rotas SPA
+```
+
+```text
+localhost:5173
+→ módulo principal servido como JavaScript
+→ resolvido: /src/main.tsx retorna text/javascript
+```
+
+O estado acima foi validado com o ambiente ativo. A suíte de testes e o build não devem ser considerados uma validação end-to-end de todos os fluxos operacionais; eles cobrem a implementação atual e as regressões principais.
 
 ---
 
@@ -2189,3 +2208,77 @@ reescrever
 ```
 
 O objetivo é manter uma base estável, modular, segura e semanticamente organizada, capaz de crescer sem perder as funcionalidades já construídas.
+
+---
+
+# 47. Auditoria final da implementação
+
+## 47.1 Validação executada
+
+Data de auditoria:
+
+```text
+2026-10-06
+```
+
+Comandos executados:
+
+```bash
+npm run test
+npm run typecheck
+npm run build
+npm run verify
+npm run dev
+npm run setup
+```
+
+Resultados:
+
+```text
+19/19 testes Python passaram
+TypeScript compilou sem erros
+Build React/TypeScript concluído
+Build completo e pacote gerado
+Verificador oficial concluído com sucesso
+Backend, servidor público e Vite iniciaram
+Rotas SPA respondentes em desenvolvimento
+Bundle local servido em /app-assets/ com MIME text/javascript
+Modulo Vite servido como JavaScript
+API sem sessão retornou 401 no backend
+npm run setup chegou à instalação do frontend, mas o Windows impediu remover
+node_modules/@esbuild/win32-x64/esbuild.exe por EPERM durante npm ci.
+A recuperação do script também falhou por causa do arquivo continuar bloqueado.
+O setup não deve ser considerado validado em estado de instalação limpa neste ambiente.
+```
+
+## 47.2 Correções aplicadas
+
+- Corrigida a base do Vite de desenvolvimento para `/`.
+- Mantido `/app-assets/` para o build local servido pelo Flask.
+- Mantida a compatibilidade com o deployment Cloudflare em `/`.
+- Confirmado o acesso direto às `/channels` e `/settings/themes` no Vite.
+- Confirmado o arquivo JavaScript do build local com MIME adequado.
+
+## 47.3 Estado real da arquitetura
+
+A implementação está parcialmente migrada para a estrutura semântica:
+
+- Domínios de autenticação, saúde, manutenção, monitoramento, playlists e sincronização existem.
+- RBAC granular e perfil de permissões estão implementados.
+- Canais e EPG ainda possuem fluxos legados e de integração parcial.
+- A estrutura arquitetural recomenda a migração incremental, mas não deve ser confundida com uma implementação completa de todos os domínios.
+- O frontend possui páginas de canais, playlists, usuários, configurações, temas e dashboard.
+- A ausência de testes end-to-end não significa que as funcionalidades estejam indisponíveis; significa que a validação automatizada atual não cobre todos os fluxos de interface.
+
+## 47.4 Pendências verificadas
+
+- Bundle principal de 829,64 kB: aviso de tamanho, sem falha funcional.
+- EPG não possui uma página administrativa completa no diretório de features atual.
+- Canais possuem uma página principal, mas o domínio de canais ainda mantém endpoints legados e integração parcial.
+- O build e a suíte não cobrem navegador, upload, sessão, sincronização completa, publicação, health check e operações em lote.
+- O workflow de CI está excluído no estado atual do repositório e não faz parte desta auditoria.
+- Alterações preexistentes em `.github/workflows/verify.yml`, `.github2/` e `.~lock.AGENTS.md#` foram preservadas.
+
+## 47.5 Critério de conclusão
+
+O projeto está funcional para instalação, compilação, testes, execução local e validação básica de assets. Não é possível afirmar que todos os recursos complexos estão completos apenas por causa dos testes e build aprovados. Cada nova alteração deve preservar o estado validado acima e atualizar esta seção quando uma funcionalidade ser concluída ou uma limitação for removida.

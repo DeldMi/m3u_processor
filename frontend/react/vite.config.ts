@@ -9,9 +9,10 @@ export default defineConfig(({ mode, command }) => {
 
     return {
         plugins: [react()],
-        // Flask serve a SPA localmente em /app-assets/. No Cloudflare Pages,
-        // a aplicação é publicada na raiz do domínio.
-        base: command === 'serve' ? '/' : (cloudflare ? '/' : '/app-assets/'),
+        // O Vite de desenvolvimento deve usar a raiz para permitir navegação
+        // direta e reload. O build local continua sendo servido pelo Flask em
+        // /app-assets/, enquanto o deployment do Cloudflare usa /.
+        base: command === 'build' && !cloudflare ? '/app-assets/' : '/',
         css: {
             preprocessorOptions: {
                 scss: {

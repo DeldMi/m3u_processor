@@ -136,8 +136,8 @@ def api_get_playlists():return jsonify({"status":PROCESS_STATE["status"],"manife
 @app.route("/api/v1/channels",methods=["GET"])
 @require_role("viewer")
 def api_get_channels():
-    channels=manager.db.list_channels(request.args.get("country"),request.args.get("category"),request.args.get("status"),request.args.get("search",""),request.args.get("sort","id"),request.args.get("direction","asc"));city=request.args.get("city")
-    return jsonify([c for c in channels if not city or city=="todos" or c.get("city")==city])
+    channels=manager.db.list_channels(request.args.get("country"),request.args.get("category"),request.args.get("status"),request.args.get("search",""),request.args.get("sort","id"),request.args.get("direction","asc"));city=request.args.get("city");state=request.args.get("state")
+    return jsonify([c for c in channels if (not city or city=="todos" or c.get("city")==city) and (not state or state=="todos" or c.get("state")==state)])
 @app.route("/api/v1/channels/options")
 @require_role("viewer")
 def api_channel_options():return jsonify(manager.db.channel_filter_options())
@@ -168,9 +168,6 @@ def api_toggle_autoremove(ch_id):
     if flag not in (0,1,False,True):return jsonify({"error":"Valor inválido"}),400
     with manager.db.get_connection() as conn:conn.execute("UPDATE channels SET auto_remove_if_offline=? WHERE id=?",(int(bool(flag)),ch_id));conn.commit()
     return jsonify({"status":"atualizado"})
-@app.route("/api/v1/channels",methods=["POST"],endpoint="legacy_create_channel")
-@require_role("editor")
-def create_channel():return jsonify({"error":"Use o domínio de canais para criação."}),405
 @app.route("/api/v1/playlists/generate",methods=["POST"])
 @require_role("editor")
 def api_generate_custom_playlist():

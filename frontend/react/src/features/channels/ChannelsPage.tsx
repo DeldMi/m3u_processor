@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { Boxes, ChevronLeft, ChevronRight, ListVideo, Play, RefreshCw, Save, SlidersHorizontal, Upload, Wifi, X } from "lucide-react";
+import { Boxes, ChevronLeft, ChevronRight, ListVideo, Play, Plus, RefreshCw, Save, SlidersHorizontal, Trash2, Upload, Wifi, X } from "lucide-react";
 import { api, send } from "../../services/api";
 import type { Channel, ChannelColumn, ChannelOptions, Manifest, User } from "../../types";
-import { Header, PanelTitle, Empty, Modal, canEdit } from "../../components/Common";
+import { Header, PanelTitle, Empty, Modal, canEdit, hasPermission } from "../../components/Common";
 
 
 export function Channels({ user }: { user: User }) {
@@ -10,6 +10,7 @@ export function Channels({ user }: { user: User }) {
     const [query, setQuery] = useState({
         search: "",
         country: "todos",
+        state: "todos",
         city: "todos",
         category: "todos",
         status: "todos",
@@ -40,6 +41,7 @@ export function Channels({ user }: { user: User }) {
     }, [
         query.search,
         query.country,
+        query.state,
         query.city,
         query.category,
         query.status,
@@ -58,6 +60,12 @@ export function Channels({ user }: { user: User }) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
         }).then(load);
+    const removeChannel = (channel: Channel) => {
+        if (!confirm(`Excluir o canal '${channel.name}'?`)) return;
+        api(`/api/v1/channels/${channel.id}`, { method: "DELETE" })
+            .then(load)
+            .catch(() => alert("Não foi possível excluir o canal."));
+    };
     const updateQuery = (key: keyof typeof query, value: string) =>
         setQuery({ ...query, [key]: value });
     const sortBy = (field: string) => setQuery({ ...query, sort: field, direction: query.sort === field && query.direction === "asc" ? "desc" : "asc" });
@@ -71,6 +79,7 @@ export function Channels({ user }: { user: User }) {
                 title="Canais e editor"
                 description="Filtre, audite e ajuste os metadados da sua grade."
             >
+                {hasPermission(user, "channels", "create") && <button className="button primary" onClick={() => setEditing({ id: 0, name: "", url: "", category: "tv", status: "desconhecido", country: "Outros", state: "Nacional/Geral", city: "Geral", auto_remove_if_offline: 1 })}><Plus size={15} /> Adicionar canal</button>}
                 <button className="button subtle" onClick={load}>
                     <RefreshCw size={15} /> Atualizar
                 </button>
@@ -86,6 +95,7 @@ export function Channels({ user }: { user: User }) {
                         />
                     </div>
                     <select value={query.country} onChange={(e) => updateQuery("country", e.target.value)}><option value="todos">Todos os países</option>{options.country.map((value) => <option key={value}>{value}</option>)}</select>
+                    <select value={query.state} onChange={(e) => updateQuery("state", e.target.value)}><option value="todos">Todos os estados</option>{options.state.map((value) => <option key={value}>{value}</option>)}</select>
                     <select value={query.city} onChange={(e) => updateQuery("city" as keyof typeof query, e.target.value)}><option value="todos">Todas as cidades</option>{options.city.map((value) => <option key={value}>{value}</option>)}</select>
                     <select
                         value={query.category}
@@ -153,7 +163,7 @@ export function Channels({ user }: { user: User }) {
                     />
                     <button
                         className="button primary"
-                        disabled={!selected.length || !canEdit(user)}
+                        disabled={!selected.length || !hasPermission(user, "playlists", "create")}
                         onClick={() => setBuilder(true)}
                     >
                         Criar lista com seleção
@@ -194,7 +204,7 @@ export function Channels({ user }: { user: User }) {
                                     {columns.includes("tvg_id") && <td>{c.tvg_id || "-"}</td>}
                                     {columns.includes("latency_ms") && <td>{c.latency_ms || 0} ms</td>}
                                     {columns.includes("auto_remove") && <td><input type="checkbox" checked={Boolean(c.auto_remove_if_offline)} disabled={!canEdit(user)} onChange={(e) => patch(`/api/v1/channels/${c.id}/autoremove`, { auto_remove_if_offline: e.target.checked ? 1 : 0 })} /></td>}
-                                    {columns.includes("actions") && <td>{canEdit(user) && <button className="text-button" onClick={() => setEditing(c)}>Editar</button>}<button className="icon-button" title="Assistir" onClick={() => dispatchEvent(new CustomEvent("play-channel", { detail: c }))}><Play size={14} /></button></td>}
+                                    {columns.includes("actions") && <td>{canEdit(user) && <button className="text-button" onClick={() => setEditing(c)}>Editar</button>}{hasPermission(user, "channels", "delete") && <button className="icon-button" title="Excluir canal" onClick={() => removeChannel(c)}><Trash2 size={14} /></button>}<button className="icon-button" title="Assistir" onClick={() => dispatchEvent(new CustomEvent("play-channel", { detail: c }))}><Play size={14} /></button></td>}
                                 </tr>
                             ))}
                         </tbody>
@@ -234,13 +244,13 @@ export function ChannelEditor({
         setForm({ ...form, [key]: value });
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
-        api(`/api/v1/channels/${channel.id}`, {
-            method: "PATCH",
+        api(channel.id ? `/api/v1/channels/${channel.id}` : "/api/v1/channels", {
+            method: channel.id ? "PATCH" : "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(form),
         })
             .then(saved)
-            .catch(() => alert("Não foi possível salvar o canal."));
+            .catch(() => alert(channel.id ? "Não foi possível salvar o canal." : "Não foi possível criar o canal."));
     };
     const uploadLogo = (file: File) => {
         const body = new FormData();
@@ -253,7 +263,7 @@ export function ChannelEditor({
             .finally(() => setUploading(false));
     };
     return (
-        <Modal title="Editar canal completo" close={close}>
+        <Modal title={channel.id ? "Editar canal completo" : "Adicionar canal"} close={close}>
             <form className="edit-form" onSubmit={submit}>
                 <div className="form-grid">
                     {(
@@ -339,7 +349,7 @@ export function ChannelEditor({
                         Cancelar
                     </button>
                     <button className="button primary">
-                        <Save size={15} /> Salvar canal
+                        <Save size={15} /> {channel.id ? "Salvar canal" : "Criar canal"}
                     </button>
                 </div>
             </form>

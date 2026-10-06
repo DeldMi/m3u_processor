@@ -5,9 +5,8 @@ import type { User } from "../types";
 import { hasPermission, Shell, Login } from "../components/Common";
 import { ThemeProvider } from "../components/ThemeProvider";
 import { Dashboard } from "../features/dashboard/DashboardPage";
-// A página ativa preserva filtros, seleção, colunas, ordenação,
-// criação, edição, exclusão e ações operacionais sobre canais.
-import { ChannelsV2 as Channels } from "../features/channels/ChannelsPageV2";
+// Mantém a experiência completa do editor e as operações administrativas.
+import { Channels } from "../features/channels/ChannelsPage";
 import { Playlists } from "../features/playlists/PlaylistsPage";
 import { SettingsHubPage } from "../features/settings/SettingsHubPage";
 import { ResourceSettingsPage } from "../features/settings/ResourceSettingsPage";
